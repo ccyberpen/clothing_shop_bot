@@ -1,3 +1,11 @@
 .env
 handlers/__pycache__/user_handlers.cpython-313.pyc
 keyboards/__pycache__/user_keyborad.cpython-313.pyc
+todo.md
+.gitignore
+admin/__pycache__/server.cpython-313.pyc
+filters/__pycache__/is_admin.cpython-313.pyc
+filters/__pycache__/is_not_admin.cpython-313.pyc
+handlers/__pycache__/admin_handlers.cpython-313.pyc
+keyboards/__pycache__/admin_keyboard.cpython-313.pyc
+utility/__pycache__/database.cpython-313.pyc

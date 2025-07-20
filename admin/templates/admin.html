@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель магазина</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --dark: #1a1a2e;
+            --light: #f8f9fa;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: #f5f7fa;
+        }
+        .sidebar {
+            background: var(--dark);
+            color: white;
+            height: 100vh;
+            position: fixed;
+        }
+        .sidebar .nav-link {
+            color: rgba(255,255,255,.7);
+            border-radius: 5px;
+            margin: 2px 0;
+        }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active {
+            background: var(--primary);
+            color: white;
+        }
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+        .table-responsive {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .action-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar col-md-3 col-lg-2 d-md-block p-3">
+        <h4 class="mb-4">Админ-панель</h4>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link active" href="#" data-table="products">
+                    <i class="bi bi-box-seam me-2"></i>Товары
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-table="categories">
+                    <i class="bi bi-tags me-2"></i>Категории
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-table="orders">
+                    <i class="bi bi-receipt me-2"></i>Заказы
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-table="users">
+                    <i class="bi bi-people me-2"></i>Пользователи
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-table="admins">
+                    <i class="bi bi-people me-2"></i>Администраторы
+                </a>
+            </li>
+        </ul>
+    </div>
+
+    <main class="main-content">
+        <div class="d-flex justify-content-between mb-4">
+            <h2 id="table-title">Товары</h2>
+            <button class="btn btn-primary" id="add-btn">
+                <i class="bi bi-plus-lg"></i> Добавить
+            </button>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="data-table">
+                        <thead id="table-header"></thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Модальное окно -->
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-title">Редактирование</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modal-body">
+                    <!-- Форма будет вставлена сюда -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-primary" id="save-btn">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Текущая таблица
+        let currentTable = 'products';
+        let editId = null;
+        const modal = new bootstrap.Modal('#editModal');
+
+        // Загрузка данных таблицы
+        async function loadTable(table) {
+            try {
+                const response = await fetch(`/api/${table}`);
+                const data = await response.json();
+                
+                document.getElementById('table-title').textContent = 
+                    table === 'products' ? 'Товары' :
+                    table === 'categories' ? 'Категории' :
+                    table === 'orders' ? 'Заказы' : 'Пользователи';
+                
+                renderTable(data, table);
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                alert('Ошибка загрузки данных');
+            }
+        }
+
+        // Отрисовка таблицы
+        function renderTable(data, table) {
+            if (!data.length) {
+                document.getElementById('table-body').innerHTML = 
+                    '<tr><td colspan="10" class="text-center">Нет данных</td></tr>';
+                return;
+            }
+
+            const headers = Object.keys(data[0]);
+            const headerRow = headers.map(h => 
+                `<th>${h === 'id' ? 'ID' : h.replace(/_/g, ' ').toUpperCase()}</th>`
+            ).join('') + '<th>Действия</th>';
+            
+            document.getElementById('table-header').innerHTML = `<tr>${headerRow}</tr>`;
+            
+            const bodyRows = data.map(item => {
+                const cells = headers.map(h => {
+                    let value = item[h];
+                    if (h === 'created_at' || h === 'updated_at') {
+                        value = new Date(value).toLocaleString();
+                    }
+                    return `<td>${value ?? '-'}</td>`;
+                }).join('');
+                
+                return `<tr>
+                    ${cells}
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary action-btn edit-btn" 
+                                data-id="${item.id}">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger action-btn delete-btn" 
+                                data-id="${item.id}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+            
+            document.getElementById('table-body').innerHTML = bodyRows;
+        }
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTable(currentTable);
+            
+            // Переключение таблиц
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    document.querySelector('.nav-link.active').classList.remove('active');
+                    link.classList.add('active');
+                    currentTable = link.dataset.table;
+                    loadTable(currentTable);
+                });
+            });
+            
+            // Кнопка добавления
+            document.getElementById('add-btn').addEventListener('click', () => {
+                editId = null;
+                showEditForm(currentTable);
+            });
+            
+            // Делегирование событий для кнопок
+            document.getElementById('table-body').addEventListener('click', (e) => {
+                if (e.target.closest('.edit-btn')) {
+                    editId = e.target.closest('.edit-btn').dataset.id;
+                    showEditForm(currentTable, editId);
+                }
+                
+                if (e.target.closest('.delete-btn')) {
+                    if (confirm('Удалить запись?')) {
+                        deleteItem(currentTable, e.target.closest('.delete-btn').dataset.id);
+                    }
+                }
+            });
+        });
+
+        // Показать форму редактирования
+        async function showEditForm(table, id = null) {
+            let formHtml = '';
+            let title = id ? 'Редактировать' : 'Добавить';
+            
+            if (table === 'products') {
+                const categories = await (await fetch('/api/categories')).json();
+                const product = id ? await (await fetch(`/api/products/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">Название</label>
+                        <input type="text" class="form-control" id="name" value="${product?.name || ''}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" id="description">${product?.description || ''}</textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Цена</label>
+                            <input type="number" step="0.01" class="form-control" id="price" value="${product?.price || ''}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Категория</label>
+                            <select class="form-select" id="category_id" required>
+                                <option value="">Выберите категорию</option>
+                                ${categories.map(c => 
+                                    `<option value="${c.id}" ${product?.category_id === c.id ? 'selected' : ''}>
+                                        ${c.name}
+                                    </option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">URL изображения</label>
+                        <input type="url" class="form-control" id="image_url" value="${product?.image_url || ''}">
+                    </div>
+                `;
+            } 
+            else if (table === 'categories') {
+                const category = id ? await (await fetch(`/api/categories/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">Название категории</label>
+                        <input type="text" class="form-control" id="name" value="${category?.name || ''}" required>
+                    </div>
+                `;
+            }
+            else if (table === 'orders') {
+                const users = await (await fetch('/api/users')).json();
+                const order = id ? await (await fetch(`/api/orders/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Пользователь</label>
+                            <select class="form-select" id="user_id" required>
+                                ${users.map(u => 
+                                    `<option value="${u.id}" ${order?.user_id === u.id ? 'selected' : ''}>
+                                        ${u.username || u.first_name + ' ' + u.last_name}
+                                    </option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Статус</label>
+                            <select class="form-select" id="status" required>
+                                <option value="new" ${order?.status === 'new' ? 'selected' : ''}>Новый</option>
+                                <option value="processing" ${order?.status === 'processing' ? 'selected' : ''}>В обработке</option>
+                                <option value="shipped" ${order?.status === 'shipped' ? 'selected' : ''}>Отправлен</option>
+                                <option value="completed" ${order?.status === 'completed' ? 'selected' : ''}>Завершен</option>
+                                <option value="cancelled" ${order?.status === 'cancelled' ? 'selected' : ''}>Отменен</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Адрес доставки</label>
+                        <textarea class="form-control" id="shipping_address" required>${order?.shipping_address || ''}</textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Общая сумма</label>
+                            <input type="number" step="0.01" class="form-control" id="total_amount" value="${order?.total_amount || ''}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Дата заказа</label>
+                            <input type="datetime-local" class="form-control" id="order_date" value="${order?.order_date || ''}" required>
+                        </div>
+                    </div>
+                `;
+            }
+            else if (table === 'users') {
+                const user = id ? await (await fetch(`/api/users/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Имя</label>
+                            <input type="text" class="form-control" id="first_name" value="${user?.first_name || ''}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Фамилия</label>
+                            <input type="text" class="form-control" id="last_name" value="${user?.last_name || ''}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Телефон</label>
+                        <input type="tel" class="form-control" id="phone" value="${user?.phone || ''}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" value="${user?.email || ''}">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Адрес</label>
+                        <textarea class="form-control" id="address">${user?.address || ''}</textarea>
+                    </div>
+                `;
+            }
+            else if (table === 'order_items') {
+                const products = await (await fetch('/api/products')).json();
+                const orders = await (await fetch('/api/orders')).json();
+                const item = id ? await (await fetch(`/api/order_items/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Заказ</label>
+                            <select class="form-select" id="order_id" required>
+                                ${orders.map(o => 
+                                    `<option value="${o.id}" ${item?.order_id === o.id ? 'selected' : ''}>
+                                        Заказ #${o.id} (${o.status})
+                                    </option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Товар</label>
+                            <select class="form-select" id="product_id" required>
+                                ${products.map(p => 
+                                    `<option value="${p.id}" ${item?.product_id === p.id ? 'selected' : ''}>
+                                        ${p.name} (${p.price} руб.)
+                                    </option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Количество</label>
+                            <input type="number" class="form-control" id="quantity" value="${item?.quantity || 1}" min="1" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Цена за единицу</label>
+                            <input type="number" step="0.01" class="form-control" id="unit_price" value="${item?.unit_price || ''}" required>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('modal-title').textContent = `${title} ${table}`;
+            document.getElementById('modal-body').innerHTML = formHtml;
+            modal.show();
+        }
+
+        // Сохранение данных
+        document.getElementById('save-btn').addEventListener('click', async () => {
+            const url = editId 
+                ? `/api/${currentTable}/${editId}` 
+                : `/api/${currentTable}`;
+                
+            const method = editId ? 'PUT' : 'POST';
+            
+            const data = {};
+            document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea').forEach(input => {
+                data[input.id] = input.value;
+            });
+            
+            try {
+                const response = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    modal.hide();
+                    loadTable(currentTable);
+                } else {
+                    alert('Ошибка сохранения');
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка соединения');
+            }
+        });
+
+        // Удаление записи
+        async function deleteItem(table, id) {
+            try {
+                const response = await fetch(`/api/${table}/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    loadTable(table);
+                } else {
+                    alert('Ошибка удаления');
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+                alert('Ошибка соединения');
+            }
+        }
+    </script>
+</body>
+</html>
