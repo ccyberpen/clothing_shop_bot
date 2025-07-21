@@ -34,6 +34,15 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+def get_id_field(table):
+    # Определяем имя поля ID
+    id_field = {
+        'products': 'product_id',
+        'categories': 'category_id',
+        'orders': 'order_id',
+        'users': 'user_id'
+    }.get(table, 'id')
+    return id_field
 
 def run_admin_panel():
     # Запуск Localtonet
@@ -71,8 +80,10 @@ async def get_table(table: str):
 
 @app.get("/api/{table}/{id}")
 async def get_item(table: str, id: int):
+    print('дошло')
+    print(f'{table} {id}')
     conn = get_db()
-    item = conn.execute(f"SELECT * FROM {table} WHERE id = ?", (id,)).fetchone()
+    item = conn.execute(f"SELECT * FROM {table} WHERE {get_id_field(table)} = ?", (id,)).fetchone()
     conn.close()
     
     if not item:
@@ -273,7 +284,7 @@ async def update_item(table: str, id: int, request: Request):
     values = list(data.values()) + [id]
     
     conn.execute(
-        f"UPDATE {table} SET {set_clause} WHERE id = ?",
+        f"UPDATE {table} SET {set_clause} WHERE {get_id_field(table)} = ?",
         values
     )
     conn.commit()
@@ -287,7 +298,7 @@ async def delete_item(table: str, item_id: int):
     try:
         # Проверяем существование записи
         item = conn.execute(
-            f"SELECT * FROM {table} WHERE id = ?",
+            f"SELECT * FROM {table} WHERE {get_id_field(table)} = ?",
             (item_id,)
         ).fetchone()
         
@@ -317,7 +328,7 @@ async def delete_item(table: str, item_id: int):
         
         # Удаляем основную запись
         conn.execute(
-            f"DELETE FROM {table} WHERE id = ?",
+            f"DELETE FROM {table} WHERE {get_id_field(table)} = ?",
             (item_id,)
         )
         conn.commit()

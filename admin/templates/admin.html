@@ -156,6 +156,8 @@
 
         // Отрисовка таблицы
        function renderTable(data, table) {
+            // Определяем имя поля ID для каждой таблицы
+            const idField = getTableIdField(table);
             const tableBody = document.getElementById('table-body');
             
             if (!data || data.length === 0) {
@@ -163,11 +165,7 @@
                 return;
             }
 
-            // Определяем ID поля в зависимости от таблицы
-            const idField = table === 'products' ? 'product_id' : 
-                        table === 'categories' ? 'category_id' : 
-                        table === 'orders' ? 'order_id' : 
-                        'id';
+            
 
             const headers = Object.keys(data[0]);
             const headerRow = headers.map(h => 
@@ -192,7 +190,7 @@
                 }).join('');
                 
                 // Используем правильное поле для ID
-                const itemId = item[idField] || item.id;
+                const itemId = item[idField];
                 
                 return `
                     <tr>
@@ -211,6 +209,16 @@
             }).join('');
             
             tableBody.innerHTML = bodyRows;
+        }
+        // Функция для определения поля ID
+        function getTableIdField(table) {
+            switch(table) {
+                case 'products': return 'product_id';
+                case 'categories': return 'category_id';
+                case 'orders': return 'order_id';
+                case 'users': return 'user_id';
+                default: return 'id';
+            }
         }
         // Показать форму редактирования
         async function showEditForm(table, id = null) {
@@ -452,9 +460,12 @@
         // Удаление записи
         async function deleteItem(table, id) {
             if (!confirm('Вы уверены, что хотите удалить эту запись?')) return;
+            console.log(table)
+            console.log(id)
             
             try {
                 const response = await fetch(`/api/${table}/${id}`, { method: 'DELETE' });
+                
                 if (!response.ok) throw new Error(await response.text());
                 loadTable(table);
             } catch (error) {
