@@ -88,6 +88,11 @@
                     <i class="bi bi-people me-2"></i>Пользователи
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#" data-table="admins">
+                    <i class="bi bi-people me-2"></i>Администраторы
+                </a>
+            </li>
         </ul>
     </div>
 
@@ -145,7 +150,9 @@
                 document.getElementById('table-title').textContent = 
                     table === 'products' ? 'Товары' :
                     table === 'categories' ? 'Категории' :
-                    table === 'orders' ? 'Заказы' : 'Пользователи';
+                    table === 'orders' ? 'Заказы' : 
+                    table === 'admins' ? 'Администраторы' :
+                    'Пользователи';
                 
                 renderTable(data, table);
             } catch (error) {
@@ -217,6 +224,7 @@
                 case 'categories': return 'category_id';
                 case 'orders': return 'order_id';
                 case 'users': return 'user_id';
+                case 'admins': return 'admin_id';
                 default: return 'id';
             }
         }
@@ -316,6 +324,40 @@
                     </div>
                 `;
             }
+            else if (table === 'users') {
+                const user = id ? await (await fetch(`/api/users/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">ID пользователя</label>
+                        <input type="text" class="form-control" id="user_id" value="${user?.user_id || ''}" ${id ? 'readonly' : ''} required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Имя пользователя</label>
+                        <input type="text" class="form-control" id="username" value="${user?.username || ''}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Дата регистрации</label>
+                        <input type="text" class="form-control" id="registration_date" value="${user?.registration_date || new Date().toISOString().slice(0, 19).replace('T', ' ')}" readonly>
+                    </div>
+                `;
+            }
+            else if (table === 'admins') {
+                const admin = id ? await (await fetch(`/api/admins/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">ID администратора</label>
+                        <input type="text" class="form-control" id="user_id" value="${admin?.admin_id || ''}" ${id ? 'readonly' : ''} required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Имя пользователя</label>
+                        <input type="text" class="form-control" id="username" value="${admin?.username || ''}" required>
+                    </div>
+                `;
+            }
+
+
             
             document.getElementById('modal-title').textContent = `${title} ${table === 'products' ? 'товар' : table === 'categories' ? 'категорию' : 'запись'}`;
             document.getElementById('modal-body').innerHTML = formHtml;
@@ -455,6 +497,7 @@
                 saveBtn.classList.remove('btn-secondary');
                 saveBtn.textContent = 'Сохранить';
             }
+
         }
 
         // Удаление записи

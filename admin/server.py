@@ -68,7 +68,7 @@ async def admin_interface(request: Request):
 
 @app.get("/api/{table}")
 async def get_table(table: str):
-    allowed_tables = ['products', 'categories', 'orders', 'users']
+    allowed_tables = ['products', 'categories', 'orders', 'users','admins']
     if table not in allowed_tables:
         raise HTTPException(status_code=400, detail="Invalid table")
     
@@ -307,7 +307,6 @@ async def delete_item(table: str, item_id: int):
                 status_code=404,
                 detail=f"Запись с ID {item_id} не найдена в таблице {table}"
             )
-        
         # Удаляем связанные данные для товаров
         if table == "products":
             # Удаляем изображения товара
