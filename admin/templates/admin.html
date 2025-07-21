@@ -22,6 +22,7 @@
             color: white;
             height: 100vh;
             position: fixed;
+            width: 250px;
         }
         .sidebar .nav-link {
             color: rgba(255,255,255,.7);
@@ -45,14 +46,26 @@
             max-height: 70vh;
             overflow-y: auto;
         }
+        .img-thumbnail {
+            max-height: 100px;
+            object-fit: cover;
+        }
         .action-btn {
             padding: 0.25rem 0.5rem;
             font-size: 0.875rem;
         }
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+        .spinner-border {
+            vertical-align: text-top;
+            margin-right: 5px;
+        }
     </style>
 </head>
 <body>
-    <div class="sidebar col-md-3 col-lg-2 d-md-block p-3">
+    <div class="sidebar p-3">
         <h4 class="mb-4">Админ-панель</h4>
         <ul class="nav flex-column">
             <li class="nav-item">
@@ -73,11 +86,6 @@
             <li class="nav-item">
                 <a class="nav-link" href="#" data-table="users">
                     <i class="bi bi-people me-2"></i>Пользователи
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="#" data-table="admins">
-                    <i class="bi bi-people me-2"></i>Администраторы
                 </a>
             </li>
         </ul>
@@ -124,7 +132,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Текущая таблица
         let currentTable = 'products';
         let editId = null;
         const modal = new bootstrap.Modal('#editModal');
@@ -149,9 +156,9 @@
 
         // Отрисовка таблицы
         function renderTable(data, table) {
+            const tableBody = document.getElementById('table-body');
             if (!data.length) {
-                document.getElementById('table-body').innerHTML = 
-                    '<tr><td colspan="10" class="text-center">Нет данных</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="10" class="text-center">Нет данных</td></tr>';
                 return;
             }
 
@@ -165,8 +172,14 @@
             const bodyRows = data.map(item => {
                 const cells = headers.map(h => {
                     let value = item[h];
+                    if (h === 'image_path' && value) {
+                        return `<td><img src="/static/${value}" class="img-thumbnail"></td>`;
+                    }
                     if (h === 'created_at' || h === 'updated_at') {
                         value = new Date(value).toLocaleString();
+                    }
+                    if (h === 'is_available') {
+                        value = value ? 'Да' : 'Нет';
                     }
                     return `<td>${value ?? '-'}</td>`;
                 }).join('');
@@ -186,7 +199,258 @@
                 </tr>`;
             }).join('');
             
-            document.getElementById('table-body').innerHTML = bodyRows;
+            tableBody.innerHTML = bodyRows;
+        }
+
+        // Показать форму редактирования
+        async function showEditForm(table, id = null) {
+            let formHtml = '';
+            let title = id ? 'Редактировать' : 'Добавить';
+            
+            if (table === 'products') {
+                const categories = await (await fetch('/api/categories')).json();
+                const product = id ? await (await fetch(`/api/products/${id}`)).json() : null;
+                const images = id ? await (await fetch(`/api/products/${id}/images`)).json() : [];
+                
+                let imagesHtml = '';
+                if (images.length > 0) {
+                    imagesHtml = `
+                        <div class="mb-3">
+                            <label class="form-label">Текущие изображения</label>
+                            <div class="d-flex flex-wrap gap-2" id="productImages">
+                                ${images.map(img => `
+                                    <div class="position-relative" style="width: 100px;">
+                                        <img src="${img.image_path}" class="img-thumbnail" style="height: 100px;">
+                                        <button onclick="deleteImage(${img.image_id})" 
+                                            class="btn btn-danger btn-sm position-absolute top-0 end-0">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        ${img.is_main ? `
+                                            <span class="badge bg-primary position-absolute bottom-0 start-0">
+                                                Главное
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>`;
+                }
+
+                formHtml = `
+                    ${imagesHtml}
+                    <div class="mb-3">
+                        <label class="form-label">Новые изображения</label>
+                        <input type="file" class="form-control" id="newImages" multiple accept="image/*">
+                        <div id="imagePreview" class="d-flex flex-wrap gap-2 mt-2"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Название</label>
+                        <input type="text" class="form-control" id="name" value="${product?.name || ''}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" id="description">${product?.description || ''}</textarea>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Цена</label>
+                            <input type="number" step="0.01" class="form-control" id="price" value="${product?.price || ''}" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Категория</label>
+                            <select class="form-select" id="category_id" required>
+                                <option value="">Выберите категорию</option>
+                                ${categories.map(c => 
+                                    `<option value="${c.category_id}" ${product?.category_id === c.category_id ? 'selected' : ''}>
+                                        ${c.name}
+                                    </option>`
+                                ).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="is_available" ${product?.is_available ? 'checked' : ''}>
+                        <label class="form-check-label" for="is_available">Доступен для заказа</label>
+                    </div>
+                `;
+            } 
+            else if (table === 'categories') {
+                const categories = await (await fetch('/api/categories')).json();
+                const category = id ? await (await fetch(`/api/categories/${id}`)).json() : null;
+                
+                formHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">Название категории</label>
+                        <input type="text" class="form-control" id="name" value="${category?.name || ''}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Родительская категория</label>
+                        <select class="form-select" id="parent_id">
+                            <option value="">Нет (корневая категория)</option>
+                            ${categories
+                                .filter(c => !c.parent_id)
+                                .map(c => `
+                                    <option value="${c.category_id}" ${category?.parent_id === c.category_id ? 'selected' : ''}>
+                                        ${c.name}
+                                    </option>`
+                                ).join('')}
+                        </select>
+                    </div>
+                `;
+            }
+            
+            document.getElementById('modal-title').textContent = `${title} ${table === 'products' ? 'товар' : table === 'categories' ? 'категорию' : 'запись'}`;
+            document.getElementById('modal-body').innerHTML = formHtml;
+            
+            // Инициализация превью для новых изображений
+            if (table === 'products') {
+                document.getElementById('newImages').addEventListener('change', function(e) {
+                    const previewContainer = document.getElementById('imagePreview');
+                    previewContainer.innerHTML = '';
+                    
+                    Array.from(this.files).forEach(file => {
+                        if (!file.type.startsWith('image/')) return;
+                        
+                        const reader = new FileReader();
+                        reader.onload = function(e) {
+                            const img = document.createElement('img');
+                            img.src = e.target.result;
+                            img.className = 'img-thumbnail';
+                            img.style.height = '100px';
+                            previewContainer.appendChild(img);
+                        }
+                        reader.readAsDataURL(file);
+                    });
+                });
+            }
+            
+            modal.show();
+        }
+
+        async function deleteImage(image_id) {
+            if (!confirm('Удалить это изображение?')) return;
+            
+            try {
+                const response = await fetch(`/api/images/${image_id}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error('Ошибка удаления');
+                showEditForm(currentTable, editId); // Перезагружаем форму
+            } catch (error) {
+                alert(error.message);
+            }
+        }
+
+        // Сохранение данных
+        document.getElementById('save-btn').addEventListener('click', async () => {
+            if (currentTable === 'products') {
+                await saveProduct();
+            } else {
+                await saveGenericItem();
+            }
+        });
+
+        async function saveProduct() {
+            const saveBtn = document.getElementById('save-btn');
+            const url = editId ? `/api/products/${editId}` : '/api/products';
+            
+            // Делаем кнопку неактивной
+            saveBtn.disabled = true;
+            saveBtn.classList.add('btn-secondary');
+            saveBtn.classList.remove('btn-primary');
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Сохранение...';
+            
+            const formData = new FormData();
+            formData.append('name', document.getElementById('name').value);
+            formData.append('price', document.getElementById('price').value);
+            formData.append('category_id', document.getElementById('category_id').value);
+            formData.append('description', document.getElementById('description').value);
+            formData.append('is_available', document.getElementById('is_available').checked ? '1' : '0');
+            
+            // Добавляем изображения
+            const imageInput = document.getElementById('newImages');
+            for (let i = 0; i < imageInput.files.length; i++) {
+                formData.append('images', imageInput.files[i]);
+            }
+            
+            try {
+                const response = await fetch(url, {
+                    method: editId ? 'PUT' : 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Ошибка сохранения');
+                }
+                
+                modal.hide();
+                loadTable(currentTable);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка сохранения: ' + error.message);
+            } finally {
+                // Восстанавливаем кнопку в любом случае
+                saveBtn.disabled = false;
+                saveBtn.classList.add('btn-primary');
+                saveBtn.classList.remove('btn-secondary');
+                saveBtn.textContent = 'Сохранить';
+            }
+        }
+
+        async function saveGenericItem() {
+            const saveBtn = document.getElementById('save-btn');
+            const url = editId ? `/api/${currentTable}/${editId}` : `/api/${currentTable}`;
+            
+            // Делаем кнопку неактивной
+            saveBtn.disabled = true;
+            saveBtn.classList.add('btn-secondary');
+            saveBtn.classList.remove('btn-primary');
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Сохранение...';
+            
+            const data = {};
+            document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea').forEach(input => {
+                data[input.id] = input.value;
+            });
+            
+            try {
+                const response = await fetch(url, {
+                    method: editId ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Ошибка сохранения');
+                }
+                
+                modal.hide();
+                loadTable(currentTable);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка сохранения: ' + error.message);
+            } finally {
+                // Восстанавливаем кнопку
+                saveBtn.disabled = false;
+                saveBtn.classList.add('btn-primary');
+                saveBtn.classList.remove('btn-secondary');
+                saveBtn.textContent = 'Сохранить';
+            }
+        }
+
+        // Удаление записи
+        async function deleteItem(table, id) {
+            if (!confirm('Вы уверены, что хотите удалить эту запись?')) return;
+            
+            try {
+                const response = await fetch(`/api/${table}/${id}`, { method: 'DELETE' });
+                if (!response.ok) throw new Error(await response.text());
+                loadTable(table);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка удаления: ' + error.message);
+            }
         }
 
         // Инициализация
@@ -218,227 +482,10 @@
                 }
                 
                 if (e.target.closest('.delete-btn')) {
-                    if (confirm('Удалить запись?')) {
-                        deleteItem(currentTable, e.target.closest('.delete-btn').dataset.id);
-                    }
+                    deleteItem(currentTable, e.target.closest('.delete-btn').dataset.id);
                 }
             });
         });
-
-        // Показать форму редактирования
-        async function showEditForm(table, id = null) {
-            let formHtml = '';
-            let title = id ? 'Редактировать' : 'Добавить';
-            
-            if (table === 'products') {
-                const categories = await (await fetch('/api/categories')).json();
-                const product = id ? await (await fetch(`/api/products/${id}`)).json() : null;
-                
-                formHtml = `
-                    <div class="mb-3">
-                        <label class="form-label">Название</label>
-                        <input type="text" class="form-control" id="name" value="${product?.name || ''}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Описание</label>
-                        <textarea class="form-control" id="description">${product?.description || ''}</textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Цена</label>
-                            <input type="number" step="0.01" class="form-control" id="price" value="${product?.price || ''}" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Категория</label>
-                            <select class="form-select" id="category_id" required>
-                                <option value="">Выберите категорию</option>
-                                ${categories.map(c => 
-                                    `<option value="${c.id}" ${product?.category_id === c.id ? 'selected' : ''}>
-                                        ${c.name}
-                                    </option>`
-                                ).join('')}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">URL изображения</label>
-                        <input type="url" class="form-control" id="image_url" value="${product?.image_url || ''}">
-                    </div>
-                `;
-            } 
-            else if (table === 'categories') {
-                const category = id ? await (await fetch(`/api/categories/${id}`)).json() : null;
-                
-                formHtml = `
-                    <div class="mb-3">
-                        <label class="form-label">Название категории</label>
-                        <input type="text" class="form-control" id="name" value="${category?.name || ''}" required>
-                    </div>
-                `;
-            }
-            else if (table === 'orders') {
-                const users = await (await fetch('/api/users')).json();
-                const order = id ? await (await fetch(`/api/orders/${id}`)).json() : null;
-                
-                formHtml = `
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Пользователь</label>
-                            <select class="form-select" id="user_id" required>
-                                ${users.map(u => 
-                                    `<option value="${u.id}" ${order?.user_id === u.id ? 'selected' : ''}>
-                                        ${u.username || u.first_name + ' ' + u.last_name}
-                                    </option>`
-                                ).join('')}
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Статус</label>
-                            <select class="form-select" id="status" required>
-                                <option value="new" ${order?.status === 'new' ? 'selected' : ''}>Новый</option>
-                                <option value="processing" ${order?.status === 'processing' ? 'selected' : ''}>В обработке</option>
-                                <option value="shipped" ${order?.status === 'shipped' ? 'selected' : ''}>Отправлен</option>
-                                <option value="completed" ${order?.status === 'completed' ? 'selected' : ''}>Завершен</option>
-                                <option value="cancelled" ${order?.status === 'cancelled' ? 'selected' : ''}>Отменен</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Адрес доставки</label>
-                        <textarea class="form-control" id="shipping_address" required>${order?.shipping_address || ''}</textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Общая сумма</label>
-                            <input type="number" step="0.01" class="form-control" id="total_amount" value="${order?.total_amount || ''}" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Дата заказа</label>
-                            <input type="datetime-local" class="form-control" id="order_date" value="${order?.order_date || ''}" required>
-                        </div>
-                    </div>
-                `;
-            }
-            else if (table === 'users') {
-                const user = id ? await (await fetch(`/api/users/${id}`)).json() : null;
-                
-                formHtml = `
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Имя</label>
-                            <input type="text" class="form-control" id="first_name" value="${user?.first_name || ''}">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Фамилия</label>
-                            <input type="text" class="form-control" id="last_name" value="${user?.last_name || ''}">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Телефон</label>
-                        <input type="tel" class="form-control" id="phone" value="${user?.phone || ''}">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Email</label>
-                        <input type="email" class="form-control" id="email" value="${user?.email || ''}">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Адрес</label>
-                        <textarea class="form-control" id="address">${user?.address || ''}</textarea>
-                    </div>
-                `;
-            }
-            else if (table === 'order_items') {
-                const products = await (await fetch('/api/products')).json();
-                const orders = await (await fetch('/api/orders')).json();
-                const item = id ? await (await fetch(`/api/order_items/${id}`)).json() : null;
-                
-                formHtml = `
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Заказ</label>
-                            <select class="form-select" id="order_id" required>
-                                ${orders.map(o => 
-                                    `<option value="${o.id}" ${item?.order_id === o.id ? 'selected' : ''}>
-                                        Заказ #${o.id} (${o.status})
-                                    </option>`
-                                ).join('')}
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Товар</label>
-                            <select class="form-select" id="product_id" required>
-                                ${products.map(p => 
-                                    `<option value="${p.id}" ${item?.product_id === p.id ? 'selected' : ''}>
-                                        ${p.name} (${p.price} руб.)
-                                    </option>`
-                                ).join('')}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Количество</label>
-                            <input type="number" class="form-control" id="quantity" value="${item?.quantity || 1}" min="1" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Цена за единицу</label>
-                            <input type="number" step="0.01" class="form-control" id="unit_price" value="${item?.unit_price || ''}" required>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            document.getElementById('modal-title').textContent = `${title} ${table}`;
-            document.getElementById('modal-body').innerHTML = formHtml;
-            modal.show();
-        }
-
-        // Сохранение данных
-        document.getElementById('save-btn').addEventListener('click', async () => {
-            const url = editId 
-                ? `/api/${currentTable}/${editId}` 
-                : `/api/${currentTable}`;
-                
-            const method = editId ? 'PUT' : 'POST';
-            
-            const data = {};
-            document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea').forEach(input => {
-                data[input.id] = input.value;
-            });
-            
-            try {
-                const response = await fetch(url, {
-                    method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                
-                if (response.ok) {
-                    modal.hide();
-                    loadTable(currentTable);
-                } else {
-                    alert('Ошибка сохранения');
-                }
-            } catch (error) {
-                console.error('Ошибка:', error);
-                alert('Ошибка соединения');
-            }
-        });
-
-        // Удаление записи
-        async function deleteItem(table, id) {
-            try {
-                const response = await fetch(`/api/${table}/${id}`, { method: 'DELETE' });
-                if (response.ok) {
-                    loadTable(table);
-                } else {
-                    alert('Ошибка удаления');
-                }
-            } catch (error) {
-                console.error('Ошибка:', error);
-                alert('Ошибка соединения');
-            }
-        }
     </script>
 </body>
 </html>
