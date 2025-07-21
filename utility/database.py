@@ -22,8 +22,8 @@ def init_db():
     # Администраторы (оставляем как есть)
     cur.execute("""
     CREATE TABLE IF NOT EXISTS admins (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT
+        admin_id INTEGER PRIMARY KEY,
+        adminname TEXT
     )""")
     
     # Категории (добавляем parent_id для иерархии)

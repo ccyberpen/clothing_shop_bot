@@ -40,7 +40,8 @@ def get_id_field(table):
         'products': 'product_id',
         'categories': 'category_id',
         'orders': 'order_id',
-        'users': 'user_id'
+        'users': 'user_id',
+        'admins': 'admin_id',
     }.get(table, 'id')
     return id_field
 
