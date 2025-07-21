@@ -6,7 +6,7 @@ from aiogram.types import FSInputFile
 from aiogram.enums import ParseMode
 from utility.database import *
 from filters.is_admin import IsAdminIDFilter
-from admin.server import ADMIN_TOKEN, LOCALTONET_URL
+from admin.server import LOCALTONET_URL
 admin_router= Router()
 admin_router.message.filter(IsAdminIDFilter())
 
