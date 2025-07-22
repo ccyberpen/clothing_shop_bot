@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
+from fastapi.responses import RedirectResponse, HTMLResponse
 import uvicorn
 import sqlite3
 import os
@@ -9,7 +9,6 @@ from os import getenv
 from dotenv import load_dotenv, find_dotenv
 import shutil
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 app = FastAPI()
@@ -81,8 +80,6 @@ async def get_table(table: str):
 
 @app.get("/api/{table}/{id}")
 async def get_item(table: str, id: int):
-    print('дошло')
-    print(f'{table} {id}')
     conn = get_db()
     item = conn.execute(f"SELECT * FROM {table} WHERE {get_id_field(table)} = ?", (id,)).fetchone()
     conn.close()
@@ -344,5 +341,67 @@ async def delete_item(table: str, item_id: int):
             status_code=500,
             detail=f"Ошибка при удалении: {str(e)}"
         )
+    finally:
+        conn.close()
+@app.get("/api/products/{product_id}/sizes")
+async def get_product_sizes(product_id: int):
+    conn = get_db()
+    sizes = conn.execute("""
+        SELECT * FROM sizes 
+        WHERE product_id = ?
+        ORDER BY size_value
+    """, (product_id,)).fetchall()
+    conn.close()
+    return [dict(size) for size in sizes]
+
+@app.post("/api/products/{product_id}/sizes")
+async def add_product_size(
+    product_id: int,
+    size_value: str = Form(...),
+    quantity: int = Form(0)
+):
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO sizes (product_id, size_value, quantity)
+            VALUES (?, ?, ?)
+            ON CONFLICT(product_id, size_value) 
+            DO UPDATE SET quantity = quantity + excluded.quantity
+        """, [product_id, size_value, quantity])
+        conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        conn.close()
+
+@app.delete("/api/sizes/{size_id}")
+async def delete_size(size_id: int):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM sizes WHERE size_id = ?", (size_id,))
+        conn.commit()
+        return {"status": "deleted"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, str(e))
+    finally:
+        conn.close()
+@app.put("/api/sizes/{size_id}")
+async def update_size(size_id: int, request: Request):
+    data = await request.json()
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE sizes 
+            SET quantity = ?
+            WHERE size_id = ?
+        """, [data.get('quantity', 0), size_id])
+        conn.commit()
+        return {"status": "updated"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, str(e))
     finally:
         conn.close()

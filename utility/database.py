@@ -1,5 +1,4 @@
 import sqlite3
-from pathlib import Path
 from datetime import datetime
 
 DATABASE_NAME = "database.db"
@@ -191,3 +190,67 @@ def set_main_image(image_id):
     conn.commit()
     conn.close()
     return True
+
+
+def get_product(product_id: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT p.*, SUM(s.quantity) as total_quantity 
+        FROM products p
+        LEFT JOIN sizes s ON p.product_id = s.product_id
+        WHERE p.product_id = ?
+        GROUP BY p.product_id
+    """, (product_id,))
+    return cur.fetchone()
+
+def get_product_images(product_id: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM product_images 
+        WHERE product_id = ?
+        ORDER BY is_main DESC
+    """, (product_id,))
+    return cur.fetchall()
+
+def get_categories(parent_id=None):
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    
+    if parent_id is None:
+        # Явно проверяем NULL и пустые значения
+        cur.execute("""
+            SELECT * FROM categories 
+            WHERE parent_id IS NULL 
+               OR parent_id = ''
+               OR TRIM(parent_id) = ''
+        """)
+    else:
+        # Для подкатегорий проверяем точное соответствие
+        cur.execute("""
+            SELECT * FROM categories 
+            WHERE parent_id = ?
+        """, (str(parent_id),))
+    
+    result = cur.fetchall()
+    conn.close()
+    return result
+
+def get_products(category_id: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT p.*, SUM(s.quantity) as total_quantity 
+        FROM products p
+        LEFT JOIN sizes s ON p.product_id = s.product_id
+        WHERE p.category_id = ? AND p.is_available = 1
+        GROUP BY p.product_id
+    """, (category_id,))
+    result = cur.fetchall()
+    conn.close()
+    return result
