@@ -140,11 +140,14 @@ async def display_product(message: types.Message, product: dict, index: int, tot
 
     # Удаляем предыдущие сообщения (если есть)
     data = await state.get_data()
+    print(data["product_messages"])
     if 'product_messages' in data:
         for msg_id in reversed(data['product_messages']):
             try:
+                print(f"Удаление {msg_id}")
                 await message.bot.delete_message(chat_id=message.chat.id, message_id=msg_id)
-            except:
+            except Exception as e:
+                print(f"Ошибка удаления сообщения с товаром {msg_id}: {e}")
                 continue
 
     if images:
@@ -173,7 +176,9 @@ async def display_product(message: types.Message, product: dict, index: int, tot
 
     # Сохраняем IDs сообщений в состоянии
     await state.update_data(product_messages=message_ids)
+    print(f"Итого имеем: {message_ids}")
     return message_ids
+
 @user_router.callback_query(F.data.startswith(("prev_", "next_")), CatalogStates.viewing_products)
 async def navigate_product(callback: types.CallbackQuery, state: FSMContext):
     data = await state.get_data()
@@ -205,13 +210,17 @@ async def back_to_categories(callback: types.CallbackQuery, state: FSMContext):
     parent_id = get_parent_id(category_id)
     if parent_id:
         categories = get_categories(parent_id=parent_id)
+        print(callback.message.message_id)
         await callback.message.delete()
         data = await state.get_data()
         if 'product_messages' in data:
+            print("YEEEES1")
+            print(data['product_messages'])
             for msg_id in reversed(data['product_messages']):
                 try:
-                    await message.bot.delete_message(chat_id=callback.chat.id, message_id=msg_id)
-                except:
+                    await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
+                except Exception as e:
+                    print(f"Ошибка удаления сообщения с товаром: {e}")
                     continue
         await callback.message.answer(
             "📂 Выберите подкатегорию:",
@@ -219,13 +228,17 @@ async def back_to_categories(callback: types.CallbackQuery, state: FSMContext):
         )
     else:
         root_categories = get_categories(parent_id=None)
+        print(callback.message.message_id)
         await callback.message.delete()
         data = await state.get_data()
         if 'product_messages' in data:
+            print("YEEEES2")
+            print(data['product_messages'])
             for msg_id in reversed(data['product_messages']):
                 try:
-                    await callback.bot.delete_message(chat_id=callback.chat.id, message_id=msg_id)
-                except:
+                    await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
+                except Exception as e:
+                    print(f"Ошибка удаления сообщения с товаром: {e}")
                     continue
         
         await callback.message.answer(
