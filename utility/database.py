@@ -81,10 +81,9 @@ def init_db():
         user_id INTEGER REFERENCES users(user_id),
         status TEXT DEFAULT 'new',
         total_amount REAL NOT NULL,
-        delivery_address TEXT,
         phone TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )""")
     
     # Состав заказа (оставляем как есть)
@@ -380,9 +379,9 @@ def create_order(user_id: int, contact_info: str) -> int:
         
         # Создаем заказ
         cur.execute("""
-            INSERT INTO orders (user_id, total_amount, delivery_address, phone, status)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, total_amount, "", contact_info, "processing"))
+            INSERT INTO orders (user_id, total_amount, phone, status)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, total_amount, contact_info, "processing"))
         order_id = cur.lastrowid
         
         # Добавляем товары в заказ

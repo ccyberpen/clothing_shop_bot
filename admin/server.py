@@ -405,3 +405,40 @@ async def update_size(size_id: int, request: Request):
         raise HTTPException(500, str(e))
     finally:
         conn.close()
+
+@app.put("/api/orders/{order_id}")
+async def update_order(
+    order_id: int,
+    status: str = Form(...),
+    delivery_address: str = Form(None),
+    phone: str = Form(None)
+):
+    conn = get_db()
+    try:
+        # Проверяем существование заказа
+        order = conn.execute(
+            "SELECT * FROM orders WHERE order_id = ?", 
+            (order_id,)
+        ).fetchone()
+        
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        # Обновляем заказ
+        conn.execute("""
+            UPDATE orders 
+            SET 
+                status = ?,
+                delivery_address = ?,
+                phone = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_id = ?
+        """, [status, delivery_address, phone, order_id])
+        
+        conn.commit()
+        return {"status": "updated"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()

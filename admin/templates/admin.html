@@ -7,6 +7,40 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
+        .order-status {
+            font-weight: 500;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+        .status-new {
+            background-color: #d1e7dd;
+            color: #0f5132;
+        }
+        .status-processing {
+            background-color: #fff3cd;
+            color: #664d03;
+        }
+        .status-shipped {
+            background-color: #cfe2ff;
+            color: #084298;
+        }
+        .status-completed {
+            background-color: #e2e3e5;
+            color: #41464b;
+        }
+        .status-cancelled {
+            background-color: #f8d7da;
+            color: #842029;
+        }
+        .order-items {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .order-item {
+            border-bottom: 1px solid #eee;
+            padding: 8px 0;
+        }
         :root {
             --primary: #4361ee;
             --secondary: #3f37c9;
@@ -181,6 +215,14 @@
                     deleteItem(currentTable, e.target.closest('.delete-btn').dataset.id);
                 }
             });
+            // Скрываем/показываем кнопку добавления
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    const table = e.target.dataset.table;
+                    document.getElementById('add-btn').style.display = 
+                        table === 'orders' ? 'none' : 'block';
+                });
+            });
         }
 
         // Загрузка данных таблицы
@@ -213,6 +255,42 @@
                 return;
             }
 
+            // Специальный рендеринг для таблицы заказов
+            if (table === 'orders') {
+                const headers = [
+                    'ID', 'Статус', 'Дата создания','Последнее изменение', 'Сумма', 'Телефон', 'Действия'
+                ];
+                
+                const headerRow = headers.map(h => `<th>${h}</th>`).join('');
+                document.getElementById('table-header').innerHTML = `<tr>${headerRow}</tr>`;
+                
+                const bodyRows = data.map(item => {
+                    return `
+                        <tr>
+                            <td>${item.order_id}</td>
+                            <td>
+                                <span class="order-status status-${item.status}">
+                                    ${getStatusDisplayName(item.status)}
+                                </span>
+                            </td>
+                            <td>${new Date(item.created_at).toLocaleString()}</td>
+                            <td>${item.updated_at ? new Date(item.updated_at).toLocaleString() : 'Нет изменений'}</td>
+                            <td>${item.total_amount} ₽</td>
+                            <td>${item.phone || '-'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary action-btn edit-btn" 
+                                        data-id="${item.order_id}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </td>
+                        </tr>`;
+                }).join('');
+                
+                tableBody.innerHTML = bodyRows;
+                return;
+            }
+
+            // Стандартный рендеринг для других таблиц
             const headers = Object.keys(data[0]);
             const headerRow = headers.map(h => 
                 `<th>${h === idField ? 'ID' : h.replace(/_/g, ' ').toUpperCase()}</th>`
@@ -235,6 +313,9 @@
                     if (h === 'total_quantity') {
                         value = value ? `${value} шт.` : 'Нет в наличии';
                     }
+                    if (h === 'status') {
+                        return `<td><span class="order-status status-${value}">${getStatusDisplayName(value)}</span></td>`;
+                    }
                     return `<td>${value ?? '-'}</td>`;
                 }).join('');
                 
@@ -246,10 +327,12 @@
                                     data-id="${item[idField]}">
                                 <i class="bi bi-pencil"></i>
                             </button>
+                            ${table !== 'orders' ? `
                             <button class="btn btn-sm btn-outline-danger action-btn delete-btn" 
                                     data-id="${item[idField]}">
                                 <i class="bi bi-trash"></i>
                             </button>
+                            ` : ''}
                         </td>
                     </tr>`;
             }).join('');
@@ -425,6 +508,60 @@
                     </div>
                 `;
             }
+            else if (table === 'orders') {
+                const order = id ? await (await fetch(`/api/orders/${id}`)).json() : null;
+                const orderItems = id ? await (await fetch(`/api/orders/${id}/items`)).json() : [];
+                const statuses = ['new', 'processing', 'shipped', 'completed', 'cancelled'];
+                
+                formHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">Номер заказа</label>
+                        <input type="text" class="form-control" value="${order?.order_id || ''}" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Статус</label>
+                        <select class="form-select" id="status">
+                            ${statuses.map(s => `
+                                <option value="${s}" ${order?.status === s ? 'selected' : ''}>
+                                    ${getStatusDisplayName(s)}
+                                </option>`
+                            ).join('')}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Дата создания</label>
+                        <input type="text" class="form-control" 
+                            value="${new Date(order?.created_at).toLocaleString() || ''}" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Общая сумма</label>
+                        <input type="text" class="form-control" 
+                            value="${order?.total_amount || 0} ₽" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Контактные данные</label>
+                        <textarea class="form-control" id="contact_info" rows="3">${order?.phone || ''}</textarea>
+                    </div>
+                    
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5>Состав заказа</h5>
+                        </div>
+                        <div class="card-body order-items">
+                            ${orderItems.length ? orderItems.map(item => `
+                                <div class="order-item">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>${item.name}</strong>
+                                        <span>${item.price} ₽ × ${item.quantity} = ${item.price * item.quantity} ₽</span>
+                                    </div>
+                                    ${item.size_value ? `<div class="text-muted">Размер: ${item.size_value}</div>` : ''}
+                                </div>
+                            `).join('') : '<p>Товары не найдены</p>'}
+                        </div>
+                    </div>
+                `;
+            }
+
             
             document.getElementById('modal-title').textContent = `${title} ${table === 'products' ? 'товар' : table === 'categories' ? 'категорию' : 'запись'}`;
             document.getElementById('modal-body').innerHTML = formHtml;
@@ -715,6 +852,16 @@
                 alert('Ошибка удаления: ' + error.message);
             }
         }
+        function getStatusDisplayName(status) {
+            const names = {
+                'new': 'Новый',
+                'processing': 'В обработке',
+                'shipped': 'Отправлен',
+                'completed': 'Завершен',
+                'cancelled': 'Отменен'
+            };
+            return names[status] || status;
+        } 
     </script>
 </body>
 </html>
