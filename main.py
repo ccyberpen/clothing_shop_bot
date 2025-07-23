@@ -10,9 +10,8 @@ import asyncio
 from pathlib import Path
 import threading
 from admin.server import run_admin_panel
+from bot_instance import bot
 
-load_dotenv(find_dotenv())
-bot = Bot(token=getenv('TOKEN'))
 dp = Dispatcher(storage=MemoryStorage())
 logging.basicConfig(level=logging.INFO) # Включаем логирование
 

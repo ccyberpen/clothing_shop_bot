@@ -41,6 +41,7 @@ def get_id_field(table):
         'orders': 'order_id',
         'users': 'user_id',
         'admins': 'admin_id',
+        'sizes': 'size_id'
     }.get(table, 'id')
     return id_field
 
@@ -410,18 +411,15 @@ async def update_size(size_id: int, request: Request):
 async def update_order(
     order_id: int,
     status: str = Form(...),
-    phone: str = Form(None)
+    phone: str = Form(None),
 ):
     conn = get_db()
     try:
-        # Проверяем существование заказа
-        order = conn.execute(
-            "SELECT * FROM orders WHERE order_id = ?", 
+        # Получаем текущий статус заказа
+        old_status = conn.execute(
+            "SELECT status FROM orders WHERE order_id = ?", 
             (order_id,)
-        ).fetchone()
-        
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
+        ).fetchone()[0]
         
         # Обновляем заказ
         conn.execute("""
@@ -432,8 +430,16 @@ async def update_order(
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = ?
         """, [status, phone, order_id])
-        
         conn.commit()
+        
+        # Вызываем обработчик уведомлений
+        from handlers.user_handlers import handle_order_status_update
+        await handle_order_status_update(
+            order_id=order_id,
+            new_status=status,
+            old_status=old_status,
+        )
+        
         return {"status": "updated"}
     except Exception as e:
         conn.rollback()

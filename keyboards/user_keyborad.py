@@ -80,3 +80,27 @@ def cancel_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="❌ Отменить", callback_data="cancel_order")
     return builder.as_markup()
+def orders_keyboard(orders: list):
+    """Инлайн клавиатура для детализации заказов"""
+    builder = InlineKeyboardBuilder()
+    for order in orders:
+        status_name = {
+                'new': 'Новый',
+                'processing': 'В обработке',
+                'shipped': 'Отправлен',
+                'completed': 'Завершен',
+                'cancelled': 'Отменен'
+            }.get(order['status'],'?')
+        builder.button(
+            text=f"Заказ #{order['order_id']} - {status_name}",
+            callback_data=f"order_detail_{order['order_id']}"
+        )
+    builder.button(text="Назад", callback_data="main_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def back_to_orders_keyboard():
+    """Клавиатура для возврата к списку заказов"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="← Назад к заказам", callback_data="back_to_orders")
+    return builder.as_markup()

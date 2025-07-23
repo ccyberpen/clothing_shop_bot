@@ -9,6 +9,7 @@ from handlers.states import CatalogStates, CartStates, OrderStates
 import asyncio
 from aiogram.utils.media_group import MediaGroupBuilder
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from bot_instance import bot
 user_router= Router()
 
 
@@ -266,6 +267,7 @@ async def return_to_main_menu(callback: types.CallbackQuery, state: FSMContext):
             "Вы вернулись в главное меню:",
             reply_markup=user_keyborad.main_keyboard()
         )
+        callback.message.delete()
         
     except Exception as e:
         print(f"Ошибка возврата в меню: {e}")
@@ -492,7 +494,7 @@ async def process_order(message: types.Message, state: FSMContext):
         user_id = message.from_user.id
         contact_info = message.text.strip()
         
-        # Проверяем формат ввода (минимальная валидация)
+        # Проверяем формат ввода
         if len(contact_info) < 5 or ',' not in contact_info:
             await message.answer(
                 "Пожалуйста, введите данные в формате: Имя, Телефон\n"
@@ -518,6 +520,7 @@ async def process_order(message: types.Message, state: FSMContext):
         clear_cart(user_id)
         await state.clear()
         
+        
     except Exception as e:
         print(f"Ошибка оформления заказа: {e}")
         await message.answer(
@@ -531,3 +534,214 @@ async def cancel_checkout(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text("Оформление заказа отменено",reply_markup=user_keyborad.main_keyboard())
     await state.clear()
     await callback.answer()
+    
+
+##############################
+#           ЗАКАЗЫ           #
+##############################
+
+@user_router.message(F.text == "📦 Мои заказы")
+async def show_user_orders(message: types.Message):
+    """Показываем список заказов пользователя"""
+    try:
+        user_id = message.from_user.id
+        orders = get_user_orders(user_id)
+        
+        if not orders:
+            await message.answer(
+                "📭 У вас пока нет заказов",
+                reply_markup=user_keyborad.main_keyboard()
+            )
+            return
+        
+        orders_text = "📦 <b>Ваши заказы</b>\n\n"
+        for order in orders:
+            status_emoji = {
+                'new': '🆕',
+                'processing': '🔄', 
+                'shipped': '🚚',
+                'completed': '✅',
+                'cancelled': '❌'
+            }.get(order['status'], 'ℹ️')
+            
+            orders_text += (
+                f"{status_emoji} <b>Заказ #{order['order_id']}</b>\n"
+                f"📅 Дата: {order['created_at']}\n"
+                f"🏷 Статус: {order['status']}\n"
+                f"💳 Сумма: {order['total_amount']} ₽\n\n"
+            )
+        
+        await message.answer(
+            orders_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=user_keyborad.orders_keyboard(orders)
+        )
+        
+    except Exception as e:
+        print(f"Ошибка при показе заказов: {e}")
+        await message.answer(
+            "Произошла ошибка при загрузке ваших заказов",
+            reply_markup=user_keyborad.main_keyboard()
+        )
+
+@user_router.callback_query(F.data.startswith("order_detail_"))
+async def show_order_detail(callback: types.CallbackQuery):
+    """Показываем детали конкретного заказа"""
+    try:
+        order_id = int(callback.data.split("_")[2])
+        order = get_order_details(order_id)
+        items = get_order_items(order_id)
+        
+        if not order or order['user_id'] != callback.from_user.id:
+            await callback.answer("Заказ не найден", show_alert=True)
+            return
+        
+        order_text = (
+            f"📦 <b>Заказ #{order['order_id']}</b>\n\n"
+            f"📅 Дата: {order['created_at']}\n"
+            f"🏷 Статус: {order['status']}\n"
+        )
+        
+        if order.get('tracking_number'):
+            order_text += f"📦 Трек-номер: {order['tracking_number']}\n"
+        
+        order_text += "\n<b>Состав заказа:</b>\n"
+        
+        for item in items:
+            size_text = f", размер: {item['size_value']}" if item.get('size_value') else ""
+            order_text += (
+                f"▪ {item['name']}{size_text}\n"
+                f"   {item['quantity']} × {item['price_at_order']} ₽ = "
+                f"{item['quantity'] * item['price_at_order']} ₽\n\n"
+            )
+        
+        order_text += f"💳 <b>Итого: {order['total_amount']} ₽</b>"
+        
+        await callback.message.edit_text(
+            order_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=user_keyborad.back_to_orders_keyboard()
+        )
+        await callback.answer()
+        
+    except Exception as e:
+        print(f"Ошибка при показе деталей заказа: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+# Добавляем новую функцию для уведомлений
+async def send_order_notification(user_id: int, order_id: int, new_status: str, tracking_number: str = None):
+    print("Ща отправлю")
+    """Отправка уведомления пользователю об изменении статуса заказа"""
+    status_messages = {
+        'processing': "🔄 Ваш заказ #{} передан в обработку",
+        'shipped': "🚚 Ваш заказ #{} отправлен" + (f", трек-номер: {tracking_number}" if tracking_number else ""),
+        'completed': "✅ Ваш заказ #{} завершен. Спасибо за покупку!",
+        'cancelled': "❌ Ваш заказ #{} отменен"
+    }
+    
+    message = status_messages.get(new_status, f"ℹ️ Статус вашего заказа #{order_id} изменен: {new_status}")
+    
+    try:
+        print("Отправляю")
+        await bot.send_message(
+            chat_id=user_id,
+            text=message.format(order_id)
+        )
+    except Exception as e:
+        print(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
+
+
+# Добавляем обработчик обновления статуса заказа (вызывается из API)
+async def handle_order_status_update(order_id: int, new_status: str, old_status: str, tracking_number: str = None):
+    """Обработчик изменения статуса заказа"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    try:
+        # Получаем информацию о заказе
+        order = conn.execute("""
+            SELECT user_id, status 
+            FROM orders 
+            WHERE order_id = ?
+        """, (order_id,)).fetchone()
+        
+        if not order:
+            return False
+        
+        user_id = order['user_id']
+        
+        # Отправляем уведомление пользователю
+        await send_order_notification(user_id, order_id, new_status, tracking_number)
+        
+        # Обработка остатков товаров
+        if new_status in ['shipped', 'completed'] and old_status not in ['shipped', 'completed']:
+            # Списание товаров при отправке/завершении
+            update_inventory(order_id, decrease=True)
+        elif new_status == 'cancelled' and old_status in ['shipped', 'completed']:
+            # Возврат товаров при отмене отправленного/завершенного заказа
+            update_inventory(order_id, decrease=False)
+        
+        # Обновляем время изменения заказа
+        conn.execute("""
+            UPDATE orders 
+            SET updated_at = ? 
+            WHERE order_id = ?
+        """, (datetime.now(), order_id))
+        conn.commit()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Ошибка обработки изменения статуса заказа {order_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
+def get_status_string(status):
+    status_name = {
+                'new': 'Новый',
+                'processing': 'В обработке',
+                'shipped': 'Отправлен',
+                'completed': 'Завершен',
+                'cancelled': 'Отменен'
+            }.get(status,'?')
+    return status_name
+@user_router.callback_query(F.data == "back_to_orders")
+async def back_to_orders_list(callback: types.CallbackQuery):
+    """Возврат к списку заказов"""
+    try:
+        user_id = callback.from_user.id
+        orders = get_user_orders(user_id)
+        
+        if not orders:
+            await callback.message.edit_text(
+                "📭 У вас пока нет заказов",
+                reply_markup=user_keyborad.main_keyboard()
+            )
+            return
+        
+        orders_text = "📦 <b>Ваши заказы</b>\n\n"
+        for order in orders:
+            status_emoji = {
+                'new': '🆕',
+                'processing': '🔄', 
+                'shipped': '🚚',
+                'completed': '✅',
+                'cancelled': '❌'
+            }.get(order['status'], 'ℹ️')
+            
+            orders_text += (
+                f"{status_emoji} <b>Заказ #{order['order_id']}</b>\n"
+                f"📅 Дата: {order['created_at']}\n"
+                f"🏷 Статус: {get_status_string(order['status'])}\n"
+                f"💳 Сумма: {order['total_amount']} ₽\n\n"
+            )
+        
+        await callback.message.edit_text(
+            orders_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=user_keyborad.orders_keyboard(orders)
+        )
+        await callback.answer()
+        
+    except Exception as e:
+        print(f"Ошибка при показе заказов: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)

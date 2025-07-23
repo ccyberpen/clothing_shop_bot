@@ -431,3 +431,132 @@ def clear_cart(user_id: int):
     cur.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
     conn.commit()
     conn.close()
+    
+# Добавляем функцию для обновления остатков
+def update_inventory(order_id: int, decrease: bool = True):
+    """Обновление остатков товаров при изменении статуса заказа"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    try:
+        # Получаем все товары из заказа
+        items = conn.execute("""
+            SELECT product_id, size_id, quantity 
+            FROM order_items 
+            WHERE order_id = ?
+        """, (order_id,)).fetchall()
+        
+        for item in items:
+            if item['size_id']:
+                # Для товаров с размерами обновляем конкретный размер
+                conn.execute("""
+                    UPDATE sizes 
+                    SET quantity = quantity + ? 
+                    WHERE size_id = ?
+                """, (-item['quantity'] if decrease else item['quantity'], item['size_id']))
+            else:
+                # Для товаров без размеров обновляем общее количество
+                conn.execute("""
+                    UPDATE products 
+                    SET quantity = quantity + ? 
+                    WHERE product_id = ?
+                """, (-item['quantity'] if decrease else item['quantity'], item['product_id']))
+        
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+        
+def get_user_orders(user_id: int) -> list:
+    """Получаем список заказов пользователя"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    try:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT order_id, status, total_amount, created_at
+            FROM orders
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (user_id,))
+        return cur.fetchall()
+    except Exception as e:
+        print(f"Ошибка при получении заказов: {e}")
+        return []
+    finally:
+        conn.close()
+def get_order_details(order_id: int) -> dict:
+    """
+    Получает детальную информацию о заказе
+    :param order_id: ID заказа
+    :return: Словарь с данными заказа или None если заказ не найден
+    """
+    conn = sqlite3.connect(DATABASE_NAME)
+    try:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        # Получаем основную информацию о заказе
+        cur.execute("""
+            SELECT 
+                order_id,
+                user_id,
+                status,
+                total_amount,
+                phone,
+                created_at,
+                updated_at
+            FROM orders
+            WHERE order_id = ?
+        """, (order_id,))
+        
+        order = cur.fetchone()
+        
+        if not order:
+            return None
+            
+        return dict(order)  # Конвертируем Row в dict
+        
+    except Exception as e:
+        print(f"Ошибка при получении деталей заказа: {e}")
+        return None
+    finally:
+        conn.close()
+
+
+def get_order_items(order_id: int) -> list:
+    """
+    Получает список товаров в заказе
+    :param order_id: ID заказа
+    :return: Список словарей с товарами или пустой список
+    """
+    conn = sqlite3.connect(DATABASE_NAME)
+    try:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT 
+                oi.item_id,
+                oi.product_id,
+                oi.size_id,
+                oi.quantity,
+                oi.price_at_order,
+                p.name,
+                p.description,
+                s.size_value
+            FROM order_items oi
+            LEFT JOIN products p ON oi.product_id = p.product_id
+            LEFT JOIN sizes s ON oi.size_id = s.size_id
+            WHERE oi.order_id = ?
+            ORDER BY oi.item_id
+        """, (order_id,))
+        
+        items = cur.fetchall()
+        return [dict(item) for item in items]
+        
+    except Exception as e:
+        print(f"Ошибка при получении товаров заказа: {e}")
+        return []
+    finally:
+        conn.close()

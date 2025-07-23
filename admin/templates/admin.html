@@ -289,7 +289,7 @@
                                 </span>
                             </td>
                             <td>${new Date(item.created_at).toLocaleString()}</td>
-                            <td>${item.updated_at ? new Date(item.updated_at).toLocaleString() : 'Нет изменений'}</td>
+                            <td>${new Date(item.updated_at).toLocaleString()}</td>
                             <td>${item.total_amount} ₽</td>
                             <td>${item.phone || '-'}</td>
                             <td>
@@ -555,7 +555,7 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Последнее изменение</label>
                             <input type="text" class="form-control" 
-                                value="${order?.updated_at ? new Date(order.updated_at).toLocaleString() : 'Нет изменений'}" readonly>
+                                value="${new Date(order?.updated_at).toLocaleString() || ''}" readonly>
                         </div>
                     </div>
                     
