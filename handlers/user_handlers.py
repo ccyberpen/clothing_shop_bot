@@ -567,7 +567,7 @@ async def show_user_orders(message: types.Message):
             orders_text += (
                 f"{status_emoji} <b>Заказ #{order['order_id']}</b>\n"
                 f"📅 Дата: {order['created_at']}\n"
-                f"🏷 Статус: {order['status']}\n"
+                f"🏷 Статус: {get_status_string(order['status'])}\n"
                 f"💳 Сумма: {order['total_amount']} ₽\n\n"
             )
         
@@ -599,7 +599,7 @@ async def show_order_detail(callback: types.CallbackQuery):
         order_text = (
             f"📦 <b>Заказ #{order['order_id']}</b>\n\n"
             f"📅 Дата: {order['created_at']}\n"
-            f"🏷 Статус: {order['status']}\n"
+            f"🏷 Статус: {get_status_string(order['status'])}\n"
         )
         
         if order.get('tracking_number'):
