@@ -1,4 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from utility.database import *
 
@@ -56,7 +56,16 @@ def products_keyboard(product_index, total_products, category_id, product_id, us
     if product_index < total_products - 1:
         builder.button(text="➡️", callback_data=f"next_{product_index}_{category_id}")
     
-    builder.button(text="🔙 К категориям", callback_data=f"back_to_cat_{category_id}")
+    builder.row(
+        InlineKeyboardButton(
+            text="🔙 К категориям", 
+            callback_data=f"back_to_cat_{category_id}"
+        ),
+        InlineKeyboardButton(
+            text="🏠 Главное меню", 
+            callback_data="main_menu"
+        )
+    )
     
     builder.adjust(2, 1)
     return builder.as_markup()
