@@ -11,6 +11,7 @@ from pathlib import Path
 import threading
 from admin.server import run_admin_panel
 from bot_instance import bot
+from utility.notifications import *
 
 dp = Dispatcher(storage=MemoryStorage())
 logging.basicConfig(level=logging.INFO) # Включаем логирование
@@ -35,11 +36,11 @@ async def main():
         await on_startup()  # Вызываем после удаления вебхука
         admin_thread = threading.Thread(target=run_admin_panel,daemon=True)
         admin_thread.start()
+        #asyncio.create_task(notification_worker())
         await dp.start_polling(bot)
         
     finally:
         await bot.session.close()
-
 if __name__ == '__main__':
     import asyncio
     init_db()

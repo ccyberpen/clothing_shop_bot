@@ -532,7 +532,7 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Номер заказа</label>
-                            <input type="text" class="form-control" value="${order?.order_id || ''}" readonly>
+                            <input type="text" class="form-control" id = "order_id" value="${order?.order_id || ''}" readonly>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Статус</label>
@@ -922,13 +922,17 @@
             saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Сохранение...';
             
             try {
+                // Создаем FormData вместо JSON
+                const formData = new FormData();
+                formData.append('status', document.getElementById('status').value);
+                formData.append('phone', document.getElementById('phone').value);
+
                 const response = await fetch(url, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        status: document.getElementById('status').value,
-                        phone: document.getElementById('phone').value
-                    })
+                    body: new URLSearchParams(formData), // Конвертируем в x-www-form-urlencoded
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
                 });
                 
                 if (!response.ok) throw new Error(await response.text());
@@ -942,7 +946,7 @@
                 saveBtn.disabled = false;
                 saveBtn.innerHTML = 'Сохранить';
             }
-        } 
+        }
     </script>
 </body>
 </html>

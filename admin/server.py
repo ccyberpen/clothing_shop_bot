@@ -10,6 +10,8 @@ from dotenv import load_dotenv, find_dotenv
 import shutil
 import uuid
 from pathlib import Path
+import asyncio
+from utility.database import *
 
 app = FastAPI()
 
@@ -149,7 +151,7 @@ async def create_product(
     finally:
         conn.close()
 
-@app.put("/api/products/{product_id}")
+@app.post("/api/products/{product_id}")
 async def update_product(
     product_id: int,
     name: str = Form(...),
@@ -273,6 +275,53 @@ async def create_item(table: str, request: Request):
     conn.close()
     
     return {"id": new_id}
+
+@app.put("/api/orders/{order_id}")
+async def update_order(
+    order_id: int,
+    status: str = Form(...),
+    phone: str = Form(None)
+):
+    """Обновление статуса заказа"""
+    conn = get_db()
+    try:
+        # Получаем текущий статус
+        cur = conn.cursor()
+        cur.execute("SELECT status, user_id FROM orders WHERE order_id = ?", (order_id,))
+        result = cur.fetchone()
+        
+        if not result:
+            raise HTTPException(404, detail="Order not found")
+            
+        old_status, user_id = result[0], result[1]
+        
+        # Обновляем запись
+        cur.execute("""
+            UPDATE orders 
+            SET status = ?,
+                phone = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE order_id = ?
+        """, (status, phone, order_id))
+        conn.commit()
+        
+        # Отправляем уведомление
+        from utility.notifications import notify_user
+        await notify_user(order_id, status)
+        
+        # Обновляем остатки
+        if status == 'completed' and old_status != 'completed':
+            update_inventory(order_id, decrease=True)
+        elif status == 'cancelled' and old_status == 'completed':
+            update_inventory(order_id, decrease=False)
+            
+        return {"status": "success"}
+        
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, detail=str(e))
+    finally:
+        conn.close()
 
 @app.put("/api/{table}/{id}")
 async def update_item(table: str, id: int, request: Request):
@@ -407,45 +456,6 @@ async def update_size(size_id: int, request: Request):
     finally:
         conn.close()
 
-@app.put("/api/orders/{order_id}")
-async def update_order(
-    order_id: int,
-    status: str = Form(...),
-    phone: str = Form(None),
-):
-    conn = get_db()
-    try:
-        # Получаем текущий статус заказа
-        old_status = conn.execute(
-            "SELECT status FROM orders WHERE order_id = ?", 
-            (order_id,)
-        ).fetchone()[0]
-        
-        # Обновляем заказ
-        conn.execute("""
-            UPDATE orders 
-            SET 
-                status = ?,
-                phone = ?,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE order_id = ?
-        """, [status, phone, order_id])
-        conn.commit()
-        
-        # Вызываем обработчик уведомлений
-        from handlers.user_handlers import handle_order_status_update
-        await handle_order_status_update(
-            order_id=order_id,
-            new_status=status,
-            old_status=old_status,
-        )
-        
-        return {"status": "updated"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        conn.close()
 
 @app.get("/api/orders/{order_id}/items")
 async def get_order_items(order_id: int):
