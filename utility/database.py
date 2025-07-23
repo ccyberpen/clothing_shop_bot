@@ -303,3 +303,47 @@ def add_to_cart_db(user_id: int, product_id: int, size_id: int = None):
         conn.commit()
     finally:
         conn.close()
+def get_product_total_quantity(product_id: int) -> int:
+    """Получает общее количество товара (без учета размеров)"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT SUM(quantity) FROM sizes 
+        WHERE product_id = ?
+    """, (product_id,))
+    result = cur.fetchone()
+    conn.close()
+    return result[0] if result and result[0] else 0
+
+def get_size_info(size_id: int) -> dict:
+    """Получает информацию о размере"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT size_id, size_value, quantity 
+        FROM sizes WHERE size_id = ?
+    """, (size_id,))
+    result = cur.fetchone()
+    conn.close()
+    return dict(result) if result else None
+
+def check_product_in_cart(user_id: int, product_id: int, size_id: int = None) -> int:
+    """Проверяет количество товара в корзине пользователя"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    cur = conn.cursor()
+    
+    if size_id:
+        cur.execute("""
+            SELECT SUM(quantity) FROM cart 
+            WHERE user_id = ? AND product_id = ? AND size_id = ?
+        """, (user_id, product_id, size_id))
+    else:
+        cur.execute("""
+            SELECT SUM(quantity) FROM cart 
+            WHERE user_id = ? AND product_id = ? AND size_id IS NULL
+        """, (user_id, product_id))
+    
+    result = cur.fetchone()
+    conn.close()
+    return result[0] if result and result[0] else 0

@@ -300,48 +300,69 @@ async def add_to_cart(callback: types.CallbackQuery, state: FSMContext):
             await callback.answer("Товар не найден", show_alert=True)
             return
         
-        # Получаем текущие данные навигации
-        nav_data = await state.get_data()
-        
         sizes = get_product_sizes(product_id)
         
         if sizes:
             await callback.answer()
             await state.set_state(CartStates.choosing_size)
+            
+            # Формируем клавиатуру только с доступными размерами
+            sizes_kb = InlineKeyboardBuilder()
+            available_sizes = []
+            
+            for size in sizes:
+                if size['quantity'] > 0:
+                    available_sizes.append(size)
+                    sizes_kb.button(
+                        text=f"{size['size_value']} (осталось: {size['quantity']})",
+                        callback_data=f"size_{size['size_id']}"
+                    )
+            
+            if not available_sizes:
+                await callback.answer("Нет доступных размеров", show_alert=True)
+                return
+            
+            sizes_kb.button(text="❌ Отмена", callback_data="cancel_cart")
+            sizes_kb.adjust(2)
+            
+            # Сохраняем данные для восстановления навигации
+            nav_data = await state.get_data()
             await state.update_data(
                 product_id=product_id,
                 product_name=product['name'],
                 product_price=product['price'],
-                # Сохраняем данные навигации
                 product_index=nav_data.get('current_index', 0),
                 category_id=nav_data.get('category_id'),
                 products=nav_data.get('products', []),
                 product_messages=nav_data.get('product_messages', [])
             )
             
-            sizes_kb = InlineKeyboardBuilder()
-            for size in sizes:
-                if size['quantity'] > 0:
-                    sizes_kb.button(
-                        text=f"{size['size_value']} ({size['quantity']} шт.)",
-                        callback_data=f"size_{size['size_id']}"
-                    )
-            
-            sizes_kb.button(text="❌ Отмена", callback_data="cancel_cart")
-            sizes_kb.adjust(2)
-            
-            # Отправляем сообщение с выбором размера
             size_msg = await callback.message.answer(
                 f"Выберите размер для {product['name']}:",
                 reply_markup=sizes_kb.as_markup()
             )
             
-            # Обновляем список сообщений для последующего удаления
+            # Обновляем список сообщений
             messages = nav_data.get('product_messages', [])
             messages.append(size_msg.message_id)
             await state.update_data(product_messages=messages)
             
         else:
+            # Для товаров без размеров проверяем общее количество
+            total_quantity = get_product_total_quantity(product_id)
+            if total_quantity <= 0:
+                await callback.answer("Товар закончился", show_alert=True)
+                return
+                
+            # Проверяем, сколько уже в корзине
+            in_cart = check_product_in_cart(user_id, product_id)
+            if in_cart >= total_quantity:
+                await callback.answer(
+                    f"Нельзя добавить больше {total_quantity} шт.", 
+                    show_alert=True
+                )
+                return
+                
             add_to_cart_db(user_id, product_id)
             await callback.answer(f"{product['name']} добавлен в корзину!")
             
@@ -353,18 +374,31 @@ async def add_to_cart(callback: types.CallbackQuery, state: FSMContext):
 async def choose_size(callback: types.CallbackQuery, state: FSMContext):
     try:
         size_id = int(callback.data.split("_")[1])
+        user_id = callback.from_user.id
         data = await state.get_data()
         
-        add_to_cart_db(
-            user_id=callback.from_user.id,
-            product_id=data['product_id'],
-            size_id=size_id
-        )
+        # Проверяем доступное количество
+        size_info = get_size_info(size_id)
+        if not size_info or size_info['quantity'] <= 0:
+            await callback.answer("Этот размер закончился", show_alert=True)
+            return
+            
+        # Проверяем, сколько уже в корзине
+        in_cart = check_product_in_cart(user_id, data['product_id'], size_id)
+        if in_cart >= size_info['quantity']:
+            await callback.answer(
+                f"Максимум {size_info['quantity']} шт. для размера {size_info['size_value']}",
+                show_alert=True
+            )
+            return
+            
+        # Добавляем в корзину
+        add_to_cart_db(user_id, data['product_id'], size_id)
         
         # Удаляем сообщение с выбором размера
         await callback.message.delete()
         
-        # Восстанавливаем состояние навигации
+        # Восстанавливаем навигацию
         await state.set_state(CatalogStates.viewing_products)
         await state.update_data(
             current_index=data['product_index'],
@@ -374,7 +408,7 @@ async def choose_size(callback: types.CallbackQuery, state: FSMContext):
         )
         
         await callback.answer(
-            f"{data['product_name']} добавлен в корзину!", 
+            f"{data['product_name']} (размер: {size_info['size_value']}) добавлен в корзину!",
             show_alert=True
         )
         
