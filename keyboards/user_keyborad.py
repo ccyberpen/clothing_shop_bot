@@ -69,3 +69,14 @@ def products_keyboard(product_index, total_products, category_id, product_id, us
     
     builder.adjust(2, 1)
     return builder.as_markup()
+def cart_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💳 Оформить заказ", callback_data="checkout")
+    builder.button(text="🏠 Главное меню", callback_data="main_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def cancel_keyboard():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="❌ Отменить", callback_data="cancel_order")
+    return builder.as_markup()

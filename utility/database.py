@@ -347,3 +347,88 @@ def check_product_in_cart(user_id: int, product_id: int, size_id: int = None) ->
     result = cur.fetchone()
     conn.close()
     return result[0] if result and result[0] else 0
+def get_cart_items(user_id: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT 
+            c.cart_id, c.quantity,
+            p.product_id, p.name, p.price,
+            s.size_id, s.size_value
+        FROM cart c
+        JOIN products p ON c.product_id = p.product_id
+        LEFT JOIN sizes s ON c.size_id = s.size_id
+        WHERE c.user_id = ?
+    """, (user_id,))
+    items = cur.fetchall()
+    conn.close()
+    return [dict(item) for item in items]
+
+def create_order(user_id: int, contact_info: str) -> int:
+    conn = sqlite3.connect(DATABASE_NAME)
+    cur = conn.cursor()
+    
+    try:
+        # Получаем содержимое корзины
+        cart_items = get_cart_items(user_id)
+        if not cart_items:
+            raise ValueError("Корзина пуста")
+        
+        # Рассчитываем общую сумму
+        total_amount = sum(item['price'] * item['quantity'] for item in cart_items)
+        
+        # Создаем заказ
+        cur.execute("""
+            INSERT INTO orders (user_id, total_amount, delivery_address, phone, status)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, total_amount, "", contact_info, "processing"))
+        order_id = cur.lastrowid
+        
+        # Добавляем товары в заказ
+        for item in cart_items:
+            cur.execute("""
+                INSERT INTO order_items (order_id, product_id, size_id, quantity, price_at_order)
+                VALUES (?, ?, ?, ?, ?)
+            """, (order_id, item['product_id'], item.get('size_id'), item['quantity'], item['price']))
+        
+        conn.commit()
+        return order_id
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+def get_order_total(order_id: int) -> float:
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    
+    try:
+        # Получаем сумму заказа из таблицы orders
+        cur.execute("""
+            SELECT total_amount 
+            FROM orders 
+            WHERE order_id = ?
+        """, (order_id,))
+        
+        result = cur.fetchone()
+        if not result:
+            raise ValueError("Заказ не найден")
+        
+        # Возвращаем сумму, округленную до 2 знаков
+        return round(float(result['total_amount']), 2)
+        
+    except Exception as e:
+        print(f"Ошибка получения суммы заказа: {e}")
+        raise
+    finally:
+        conn.close()
+
+def clear_cart(user_id: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()

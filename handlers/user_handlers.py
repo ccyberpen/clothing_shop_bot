@@ -5,7 +5,7 @@ from keyboards import user_keyborad
 from aiogram.types import FSInputFile
 from aiogram.enums import ParseMode
 from utility.database import *
-from handlers.states import CatalogStates, CartStates
+from handlers.states import CatalogStates, CartStates, OrderStates
 import asyncio
 from aiogram.utils.media_group import MediaGroupBuilder
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -32,7 +32,7 @@ async def cmd_support(message: types.Message, state:FSMContext):
     await message.answer_photo(
         photo=photo,
         caption=support_text,
-        reply_markup=user_keyborad.main_kb(),
+        reply_markup=user_keyborad.main_keyboard(),
         parse_mode=ParseMode.HTML
     )
 ###########################################################
@@ -113,7 +113,7 @@ async def show_products(message: types.Message, category_id: int, state: FSMCont
     products = get_products(category_id)
     
     if not products:
-        await message.answer("В этой категории пока нет товаров")
+        await message.answer("В этой категории пока нет товаров",reply_markup=user_keyborad.main_keyboard())
         await state.clear()
         return
     
@@ -444,3 +444,90 @@ async def cancel_cart(callback: types.CallbackQuery, state: FSMContext):
         print(f"Ошибка при отмене добавления в корзину: {e}")
         await callback.answer("Произошла ошибка", show_alert=True)
         await state.clear()
+
+############################################################
+#           ПРОСМОТР КОРЗИНЫ И ОФОРМЛЕНИЕ ЗАКАЗА           #
+############################################################
+
+@user_router.message(F.text == "🛒 Корзина")
+async def view_cart(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    cart_items = get_cart_items(user_id)
+    
+    if not cart_items:
+        await message.answer("Ваша корзина пуста", reply_markup=user_keyborad.main_keyboard())
+        return
+    
+    total_amount = sum(item['price'] * item['quantity'] for item in cart_items)
+    cart_text = "🛒 <b>Ваша корзина</b>\n\n"
+    
+    for item in cart_items:
+        size_text = f", размер: {item['size_value']}" if item['size_value'] else ""
+        cart_text += (
+            f"▪️ {item['name']}{size_text}\n"
+            f"   Кол-во: {item['quantity']} × {item['price']} ₽ = {item['quantity'] * item['price']} ₽\n\n"
+        )
+    
+    cart_text += f"💳 <b>Итого: {total_amount} ₽</b>"
+    
+    await state.set_state(OrderStates.viewing_cart)
+    await message.answer(
+        cart_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=user_keyborad.cart_keyboard()
+    )
+@user_router.callback_query(F.data == "checkout", OrderStates.viewing_cart)
+async def start_checkout(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(
+        "Введите ваши контактные данные для оформления заказа (имя и телефон):\n"
+        "Пример: Иван Иванов, +79123456789",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(OrderStates.creating_order)
+
+@user_router.message(OrderStates.creating_order)
+async def process_order(message: types.Message, state: FSMContext):
+    try:
+        user_id = message.from_user.id
+        contact_info = message.text.strip()
+        
+        # Проверяем формат ввода (минимальная валидация)
+        if len(contact_info) < 5 or ',' not in contact_info:
+            await message.answer(
+                "Пожалуйста, введите данные в формате: Имя, Телефон\n"
+                "Пример: Иван Иванов, +79123456789",
+                reply_markup=user_keyborad.cancel_keyboard()
+            )
+            return
+        
+        # Создаем заказ
+        order_id = create_order(user_id, contact_info)
+        
+        # Отправляем подтверждение
+        await message.answer(
+            "✅ <b>Ваш заказ оформлен!</b>\n\n"
+            f"Номер заказа: <code>{order_id}</code>\n"
+            "Статус: В обработке\n\n"
+            f"Отправляйте на номер +78005553535 <code>{get_order_total(order_id)}</code>₽",
+            parse_mode=ParseMode.HTML,
+            reply_markup=user_keyborad.main_keyboard()
+        )
+        
+        # Очищаем корзину
+        clear_cart(user_id)
+        await state.clear()
+        
+    except Exception as e:
+        print(f"Ошибка оформления заказа: {e}")
+        await message.answer(
+            "Произошла ошибка при оформлении заказа. Пожалуйста, попробуйте позже.",
+            reply_markup=user_keyborad.main_keyboard()
+        )
+        await state.clear()
+
+@user_router.callback_query(F.data == "cancel_order", OrderStates.creating_order)
+async def cancel_checkout(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Оформление заказа отменено",reply_markup=user_keyborad.main_keyboard())
+    await state.clear()
+    await callback.answer()
