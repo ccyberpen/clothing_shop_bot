@@ -5,10 +5,10 @@ from keyboards import user_keyborad
 from aiogram.types import FSInputFile
 from aiogram.enums import ParseMode
 from utility.database import *
-from handlers.states import CatalogStates
+from handlers.states import CatalogStates, CartStates
 import asyncio
-from aiogram.types import InputMediaPhoto
 from aiogram.utils.media_group import MediaGroupBuilder
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 user_router= Router()
 
 
@@ -285,3 +285,125 @@ def get_parent_id(category_id: int) -> int | None:
     if not result or not result[0] or str(result[0]).strip() == '':
         return None
     return int(result[0])
+
+#######################################
+#          РАБОТА С КОРЗИНОЙ          #
+#######################################
+@user_router.callback_query(F.data.startswith("cart_"))
+async def add_to_cart(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        product_id = int(callback.data.split("_")[1])
+        user_id = callback.from_user.id
+        product = get_product(product_id)
+        
+        if not product:
+            await callback.answer("Товар не найден", show_alert=True)
+            return
+        
+        # Получаем текущие данные навигации
+        nav_data = await state.get_data()
+        
+        sizes = get_product_sizes(product_id)
+        
+        if sizes:
+            await callback.answer()
+            await state.set_state(CartStates.choosing_size)
+            await state.update_data(
+                product_id=product_id,
+                product_name=product['name'],
+                product_price=product['price'],
+                # Сохраняем данные навигации
+                product_index=nav_data.get('current_index', 0),
+                category_id=nav_data.get('category_id'),
+                products=nav_data.get('products', []),
+                product_messages=nav_data.get('product_messages', [])
+            )
+            
+            sizes_kb = InlineKeyboardBuilder()
+            for size in sizes:
+                if size['quantity'] > 0:
+                    sizes_kb.button(
+                        text=f"{size['size_value']} ({size['quantity']} шт.)",
+                        callback_data=f"size_{size['size_id']}"
+                    )
+            
+            sizes_kb.button(text="❌ Отмена", callback_data="cancel_cart")
+            sizes_kb.adjust(2)
+            
+            # Отправляем сообщение с выбором размера
+            size_msg = await callback.message.answer(
+                f"Выберите размер для {product['name']}:",
+                reply_markup=sizes_kb.as_markup()
+            )
+            
+            # Обновляем список сообщений для последующего удаления
+            messages = nav_data.get('product_messages', [])
+            messages.append(size_msg.message_id)
+            await state.update_data(product_messages=messages)
+            
+        else:
+            add_to_cart_db(user_id, product_id)
+            await callback.answer(f"{product['name']} добавлен в корзину!")
+            
+    except Exception as e:
+        print(f"Ошибка добавления в корзину: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+
+@user_router.callback_query(F.data.startswith("size_"), CartStates.choosing_size)
+async def choose_size(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        size_id = int(callback.data.split("_")[1])
+        data = await state.get_data()
+        
+        add_to_cart_db(
+            user_id=callback.from_user.id,
+            product_id=data['product_id'],
+            size_id=size_id
+        )
+        
+        # Удаляем сообщение с выбором размера
+        await callback.message.delete()
+        
+        # Восстанавливаем состояние навигации
+        await state.set_state(CatalogStates.viewing_products)
+        await state.update_data(
+            current_index=data['product_index'],
+            category_id=data['category_id'],
+            products=data['products'],
+            product_messages=data.get('product_messages', [])
+        )
+        
+        await callback.answer(
+            f"{data['product_name']} добавлен в корзину!", 
+            show_alert=True
+        )
+        
+    except Exception as e:
+        print(f"Ошибка выбора размера: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+        await state.clear()
+
+@user_router.callback_query(F.data == "cancel_cart", CartStates.choosing_size)
+async def cancel_cart(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        # Получаем данные о текущем товаре из состояния
+        data = await state.get_data()
+        
+        # Удаляем сообщение с выбором размера
+        await callback.message.delete()
+        
+        # Восстанавливаем состояние просмотра товаров
+        await state.set_state(CatalogStates.viewing_products)
+        await state.update_data(
+            current_index=data['product_index'],
+            category_id=data['category_id'],
+            products=data['products'],
+            product_messages=data.get('product_messages', [])
+        )
+        
+        await callback.answer("Выбор размера отменён")
+        
+    except Exception as e:
+        print(f"Ошибка при отмене добавления в корзину: {e}")
+        await callback.answer("Произошла ошибка", show_alert=True)
+        await state.clear()

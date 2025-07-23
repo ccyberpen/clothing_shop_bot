@@ -254,3 +254,52 @@ def get_products(category_id: int):
     result = cur.fetchall()
     conn.close()
     return result
+def get_product_sizes(product_id: int):
+    conn = sqlite3.connect(DATABASE_NAME)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT * FROM sizes 
+        WHERE product_id = ? AND quantity > 0
+        ORDER BY size_value
+    """, (product_id,))
+    sizes = cur.fetchall()
+    conn.close()
+    return sizes
+
+def add_to_cart_db(user_id: int, product_id: int, size_id: int = None):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cur = conn.cursor()
+    
+    try:
+        # Проверяем, есть ли уже такой товар в корзине
+        if size_id:
+            cur.execute("""
+                SELECT cart_id, quantity FROM cart 
+                WHERE user_id = ? AND product_id = ? AND size_id = ?
+            """, (user_id, product_id, size_id))
+        else:
+            cur.execute("""
+                SELECT cart_id, quantity FROM cart 
+                WHERE user_id = ? AND product_id = ? AND size_id IS NULL
+            """, (user_id, product_id))
+        
+        existing = cur.fetchone()
+        
+        if existing:
+            # Увеличиваем количество, если товар уже в корзине
+            new_quantity = existing[1] + 1
+            cur.execute("""
+                UPDATE cart SET quantity = ? 
+                WHERE cart_id = ?
+            """, (new_quantity, existing[0]))
+        else:
+            # Добавляем новый товар в корзину
+            cur.execute("""
+                INSERT INTO cart (user_id, product_id, size_id, quantity) 
+                VALUES (?, ?, ?, 1)
+            """, (user_id, product_id, size_id))
+        
+        conn.commit()
+    finally:
+        conn.close()
