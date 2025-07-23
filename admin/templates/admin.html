@@ -7,6 +7,21 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
+        .order-items-table {
+            font-size: 0.9rem;
+        }
+        .order-items-table th {
+            background-color: #f8f9fa;
+            position: sticky;
+            top: 0;
+        }
+        .order-items-table td, .order-items-table th {
+            padding: 0.5rem;
+            vertical-align: middle;
+        }
+        .order-items-table tr:last-child td {
+            border-bottom: none;
+        }
         .order-status {
             font-weight: 500;
             padding: 3px 8px;
@@ -514,55 +529,90 @@
                 const statuses = ['new', 'processing', 'shipped', 'completed', 'cancelled'];
                 
                 formHtml = `
-                    <div class="mb-3">
-                        <label class="form-label">Номер заказа</label>
-                        <input type="text" class="form-control" value="${order?.order_id || ''}" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Статус</label>
-                        <select class="form-select" id="status">
-                            ${statuses.map(s => `
-                                <option value="${s}" ${order?.status === s ? 'selected' : ''}>
-                                    ${getStatusDisplayName(s)}
-                                </option>`
-                            ).join('')}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Дата создания</label>
-                        <input type="text" class="form-control" 
-                            value="${new Date(order?.created_at).toLocaleString() || ''}" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Общая сумма</label>
-                        <input type="text" class="form-control" 
-                            value="${order?.total_amount || 0} ₽" readonly>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Контактные данные</label>
-                        <textarea class="form-control" id="contact_info" rows="3">${order?.phone || ''}</textarea>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Номер заказа</label>
+                            <input type="text" class="form-control" value="${order?.order_id || ''}" readonly>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Статус</label>
+                            <select class="form-select" id="status">
+                                ${statuses.map(s => `
+                                    <option value="${s}" ${order?.status === s ? 'selected' : ''}>
+                                        ${getStatusDisplayName(s)}
+                                    </option>`
+                                ).join('')}
+                            </select>
+                        </div>
                     </div>
                     
-                    <div class="card mt-3">
-                        <div class="card-header">
-                            <h5>Состав заказа</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Дата создания</label>
+                            <input type="text" class="form-control" 
+                                value="${new Date(order?.created_at).toLocaleString() || ''}" readonly>
                         </div>
-                        <div class="card-body order-items">
-                            ${orderItems.length ? orderItems.map(item => `
-                                <div class="order-item">
-                                    <div class="d-flex justify-content-between">
-                                        <strong>${item.name}</strong>
-                                        <span>${item.price} ₽ × ${item.quantity} = ${item.price * item.quantity} ₽</span>
-                                    </div>
-                                    ${item.size_value ? `<div class="text-muted">Размер: ${item.size_value}</div>` : ''}
-                                </div>
-                            `).join('') : '<p>Товары не найдены</p>'}
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Последнее изменение</label>
+                            <input type="text" class="form-control" 
+                                value="${order?.updated_at ? new Date(order.updated_at).toLocaleString() : 'Нет изменений'}" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Общая сумма</label>
+                            <input type="text" class="form-control" 
+                                value="${order?.total_amount || 0} ₽" readonly>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Контактный телефон</label>
+                            <input type="text" class="form-control" id="phone" 
+                                value="${order?.phone || ''}">
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Состав заказа</h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Товар</th>
+                                        <th>Цена</th>
+                                        <th>Кол-во</th>
+                                        <th>Сумма</th>
+                                        <th>Размер</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${orderItems.length ? orderItems.map(item => `
+                                        <tr>
+                                            <td>${item.name}</td>
+                                            <td>${item.price_at_order} ₽</td>
+                                            <td>${item.quantity}</td>
+                                            <td>${item.price_at_order * item.quantity} ₽</td>
+                                            <td>${item.size_value || '-'}</td>
+                                        </tr>
+                                    `).join('') : `
+                                        <tr>
+                                            <td colspan="5" class="text-center">Товары не найдены</td>
+                                        </tr>
+                                    `}
+                                    <tr class="table-active">
+                                        <td colspan="3" class="text-end"><strong>Итого:</strong></td>
+                                        <td colspan="2"><strong>${order?.total_amount || 0} ₽</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 `;
             }
 
-            
+                        
             document.getElementById('modal-title').textContent = `${title} ${table === 'products' ? 'товар' : table === 'categories' ? 'категорию' : 'запись'}`;
             document.getElementById('modal-body').innerHTML = formHtml;
             
@@ -744,6 +794,8 @@
         document.getElementById('save-btn').addEventListener('click', async () => {
             if (currentTable === 'products') {
                 await saveProduct();
+            } else if (currentTable === 'orders') {
+                await saveOrder();
             } else {
                 await saveGenericItem();
             }
@@ -861,6 +913,35 @@
                 'cancelled': 'Отменен'
             };
             return names[status] || status;
+        }
+        async function saveOrder() {
+            const saveBtn = document.getElementById('save-btn');
+            const url = `/api/orders/${editId}`;
+            
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Сохранение...';
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: document.getElementById('status').value,
+                        phone: document.getElementById('phone').value
+                    })
+                });
+                
+                if (!response.ok) throw new Error(await response.text());
+                
+                modal.hide();
+                loadTable(currentTable);
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Ошибка сохранения: ' + error.message);
+            } finally {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = 'Сохранить';
+            }
         } 
     </script>
 </body>

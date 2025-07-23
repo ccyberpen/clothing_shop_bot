@@ -410,7 +410,6 @@ async def update_size(size_id: int, request: Request):
 async def update_order(
     order_id: int,
     status: str = Form(...),
-    delivery_address: str = Form(None),
     phone: str = Form(None)
 ):
     conn = get_db()
@@ -429,16 +428,37 @@ async def update_order(
             UPDATE orders 
             SET 
                 status = ?,
-                delivery_address = ?,
                 phone = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE order_id = ?
-        """, [status, delivery_address, phone, order_id])
+        """, [status, phone, order_id])
         
         conn.commit()
         return {"status": "updated"}
     except Exception as e:
         conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.get("/api/orders/{order_id}/items")
+async def get_order_items(order_id: int):
+    conn = get_db()
+    try:
+        items = conn.execute("""
+            SELECT 
+                oi.*, 
+                p.name,
+                p.price as current_price,
+                s.size_value
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.product_id
+            LEFT JOIN sizes s ON oi.size_id = s.size_id
+            WHERE oi.order_id = ?
+        """, (order_id,)).fetchall()
+        
+        return [dict(item) for item in items]
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
