@@ -151,48 +151,6 @@ async def create_product(
     finally:
         conn.close()
 
-@app.post("/api/products/{product_id}")
-async def update_product(
-    product_id: int,
-    name: str = Form(...),
-    price: float = Form(...),
-    category_id: int = Form(...),
-    description: str = Form(None),
-    is_available: bool = Form(True),
-    images: list[UploadFile] = File(None)
-):
-    conn = get_db()
-    try:
-        # Обновляем товар
-        conn.execute("""
-            UPDATE products 
-            SET name = ?, price = ?, category_id = ?, description = ?, is_available = ?
-            WHERE product_id = ?
-        """, [name, price, category_id, description, is_available, product_id])
-        
-        # Добавляем новые изображения
-        if images:
-            for img in images:
-                if img.content_type.startswith('image/'):
-                    filename = f"{uuid.uuid4().hex}{os.path.splitext(img.filename)[1]}"
-                    filepath = os.path.join(STATIC_DIR, "products", filename)
-                    
-                    with open(filepath, "wb") as buffer:
-                        shutil.copyfileobj(img.file, buffer)
-                    
-                    # Новые изображения не главные по умолчанию
-                    conn.execute("""
-                        INSERT INTO product_images (product_id, image_path, is_main)
-                        VALUES (?, ?, ?)
-                    """, [product_id, filename, False])
-        
-        conn.commit()
-        return {"status": "updated"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        conn.close()
 
 @app.delete("/api/images/{image_id}")
 async def delete_image(image_id: int):
@@ -320,6 +278,48 @@ async def update_order(
     except Exception as e:
         conn.rollback()
         raise HTTPException(500, detail=str(e))
+    finally:
+        conn.close()
+@app.put("/api/products/{product_id}")
+async def update_product(
+    product_id: int,
+    name: str = Form(...),
+    price: float = Form(...),
+    category_id: int = Form(...),
+    description: str = Form(None),
+    is_available: bool = Form(True),
+    images: list[UploadFile] = File(None)
+):
+    conn = get_db()
+    try:
+        # Обновляем товар
+        conn.execute("""
+            UPDATE products 
+            SET name = ?, price = ?, category_id = ?, description = ?, is_available = ?
+            WHERE product_id = ?
+        """, [name, price, category_id, description, is_available, product_id])
+        
+        # Добавляем новые изображения
+        if images:
+            for img in images:
+                if img.content_type.startswith('image/'):
+                    filename = f"{uuid.uuid4().hex}{os.path.splitext(img.filename)[1]}"
+                    filepath = os.path.join(STATIC_DIR, "products", filename)
+                    
+                    with open(filepath, "wb") as buffer:
+                        shutil.copyfileobj(img.file, buffer)
+                    
+                    # Новые изображения не главные по умолчанию
+                    conn.execute("""
+                        INSERT INTO product_images (product_id, image_path, is_main)
+                        VALUES (?, ?, ?)
+                    """, [product_id, filename, False])
+        
+        conn.commit()
+        return {"status": "updated"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
 

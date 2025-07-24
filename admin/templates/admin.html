@@ -361,7 +361,7 @@
                 case 'categories': return 'category_id';
                 case 'orders': return 'order_id';
                 case 'users': return 'user_id';
-                case 'admins': return 'user_id';
+                case 'admins': return 'admin_id';
                 default: return 'id';
             }
         }
@@ -493,7 +493,7 @@
             }
             else if (table === 'users') {
                 const user = id ? await (await fetch(`/api/users/${id}`)).json() : null;
-                
+                console.log(user)
                 formHtml = `
                     <div class="mb-3">
                         <label class="form-label">ID пользователя</label>
@@ -514,12 +514,12 @@
                 
                 formHtml = `
                     <div class="mb-3">
-                        <label class="form-label">ID пользователя</label>
-                        <input type="number" class="form-control" id="user_id" value="${admin?.user_id || ''}" required>
+                        <label class="form-label">ID администратора</label>
+                        <input type="number" class="form-control" id="user_id" value="${admin?.admin_id || ''}" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Имя пользователя</label>
-                        <input type="text" class="form-control" id="username" value="${admin?.username || ''}" required>
+                        <label class="form-label">Имя администратора</label>
+                        <input type="text" class="form-control" id="username" value="${admin?.adminname || ''}" required>
                     </div>
                 `;
             }
@@ -805,43 +805,61 @@
             const saveBtn = document.getElementById('save-btn');
             const url = editId ? `/api/products/${editId}` : '/api/products';
             
+            // Визуальные изменения кнопки
             saveBtn.disabled = true;
             saveBtn.classList.add('btn-secondary');
             saveBtn.classList.remove('btn-primary');
-            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Сохранение...';
-            
-            const formData = new FormData();
-            formData.append('name', document.getElementById('name').value);
-            formData.append('price', document.getElementById('price').value);
-            formData.append('category_id', document.getElementById('category_id').value);
-            formData.append('description', document.getElementById('description').value);
-            formData.append('is_available', document.getElementById('is_available').checked ? '1' : '0');
-            
-            const imageInput = document.getElementById('newImages');
-            for (let i = 0; i < imageInput.files.length; i++) {
-                formData.append('images', imageInput.files[i]);
-            }
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Сохранение...';
             
             try {
+                // 1. Собираем FormData
+                const formData = new FormData();
+                
+                // 2. Добавляем текстовые поля (обязательные)
+                formData.append('name', document.getElementById('name').value);
+                formData.append('price', parseFloat(document.getElementById('price').value).toFixed(2));
+                formData.append('category_id', document.getElementById('category_id').value);
+                
+                // 3. Добавляем необязательные поля
+                const description = document.getElementById('description').value;
+                if (description) formData.append('description', description);
+                
+                // 4. Булево значение (доступность)
+                formData.append('is_available', document.getElementById('is_available').checked ? 'true' : 'false');
+                
+                // 5. Обработка изображений
+                const imageInput = document.getElementById('newImages');
+                if (imageInput.files.length > 0) {
+                    for (let i = 0; i < imageInput.files.length; i++) {
+                        formData.append('images', imageInput.files[i]);
+                    }
+                }
+                
+                // 6. Отправка запроса
                 const response = await fetch(url, {
                     method: editId ? 'PUT' : 'POST',
-                    body: formData
+                    body: formData,
+                    // Заголовки не нужны - браузер сам установит multipart/form-data
                 });
                 
+                // 7. Обработка ответа
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(errorText || 'Ошибка сохранения');
+                    const errorData = await response.json().catch(() => null);
+                    throw new Error(errorData?.detail || 'Неизвестная ошибка сервера');
                 }
                 
                 const result = await response.json();
                 if (!editId) editId = result.product_id;
                 
+                // 8. Успешное завершение
                 modal.hide();
                 loadTable(currentTable);
+                
             } catch (error) {
-                console.error('Error:', error);
-                alert('Ошибка сохранения: ' + error.message);
+                console.error('Ошибка сохранения:', error);
+                alert(`Ошибка сохранения: ${error.message}`);
             } finally {
+                // 9. Восстановление состояния кнопки
                 saveBtn.disabled = false;
                 saveBtn.classList.add('btn-primary');
                 saveBtn.classList.remove('btn-secondary');
@@ -915,38 +933,38 @@
             return names[status] || status;
         }
         async function saveOrder() {
-            const saveBtn = document.getElementById('save-btn');
-            const url = `/api/orders/${editId}`;
-            
-            saveBtn.disabled = true;
-            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Сохранение...';
-            
-            try {
-                // Создаем FormData вместо JSON
-                const formData = new FormData();
-                formData.append('status', document.getElementById('status').value);
-                formData.append('phone', document.getElementById('phone').value);
+        const saveBtn = document.getElementById('save-btn');
+        const url = `/api/orders/${editId}`;
+        
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Сохранение...';
+        
+        try {
+            // Создаем FormData вместо JSON
+            const formData = new FormData();
+            formData.append('status', document.getElementById('status').value);
+            formData.append('phone', document.getElementById('phone').value);
 
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    body: new URLSearchParams(formData), // Конвертируем в x-www-form-urlencoded
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    }
-                });
-                
-                if (!response.ok) throw new Error(await response.text());
-                
-                modal.hide();
-                loadTable(currentTable);
-            } catch (error) {
-                console.error('Error:', error);
-                alert('Ошибка сохранения: ' + error.message);
-            } finally {
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = 'Сохранить';
-            }
+            const response = await fetch(url, {
+                method: 'PUT',
+                body: new URLSearchParams(formData), // Конвертируем в x-www-form-urlencoded
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
+            
+            if (!response.ok) throw new Error(await response.text());
+            
+            modal.hide();
+            loadTable(currentTable);
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Ошибка сохранения: ' + error.message);
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = 'Сохранить';
         }
+    }
     </script>
 </body>
 </html>
